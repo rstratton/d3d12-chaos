@@ -365,7 +365,7 @@ struct CD3DX12_RASTERIZER_DESC : public D3D12_RASTERIZER_DESC
         DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
         DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
         SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-        DepthClipEnable = TRUE;
+        DepthClipEnable = FALSE;
         MultisampleEnable = FALSE;
         AntialiasedLineEnable = FALSE;
         ForcedSampleCount = 0;
