@@ -207,7 +207,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 		};
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
-		rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
+		rasterizerStateDesc.CullMode = D3D12_CULL_MODE_BACK;
 		// Describe and create the graphics pipeline state object (PSO).
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
@@ -230,10 +230,6 @@ void D3D12HelloConstBuffers::LoadAssets()
 	// Create the command list.
 	ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList)));
 
-	// Command lists are created in the recording state, but there is nothing
-	// to record yet. The main loop expects it to be closed, so close it now.
-	ThrowIfFailed(m_commandList->Close());
-
 	// Create the vertex buffer.
 	{
 
@@ -243,15 +239,15 @@ void D3D12HelloConstBuffers::LoadAssets()
 			{ { 0.0f, 0.25f * m_aspectRatio, 0.0f },{ 1.0f, 0.0f, 0.0f, 1.0f } },
 		{ { 0.25f, -0.25f * m_aspectRatio, 0.0f },{ 0.0f, 1.0f, 0.0f, 1.0f } },
 		{ { -0.25f, -0.25f * m_aspectRatio, 0.0f },{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.f, 0.f, 1.f },{ 0.f,0.f,0.f,1.f } }
+		{ { 0.f, 0.f, 1.f },{ 1.f,1.f,0.f,1.f } }
 
 		};
 
-		DWORD indices[] =
+		short indices[] =
 		{
-			0,1,2,
-			0,3,1,
-			0,2,3,
+			0,2,1,
+			0,1,3,
+			0,3,2,
 			1,2,3
 		};
 
@@ -282,8 +278,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		m_vertexBufferDataFuck.RowPitch = vertexBufferSize;
 		m_vertexBufferDataFuck.SlicePitch = vertexBufferSize;
 		// Copy the triangle data to the vertex buffer.
-		UpdateSubresources(m_commandList.Get(), m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &m_vertexBufferDataFuck);
-		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+		UpdateSubresources<1>(m_commandList.Get(), m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &m_vertexBufferDataFuck);
+		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 		
 
 		/*UINT8* pVertexDataBegin;
@@ -298,14 +294,13 @@ void D3D12HelloConstBuffers::LoadAssets()
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
 
 
-		/*ThrowIfFailed(m_device->CreateCommittedResource(
+		ThrowIfFailed(m_device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 			D3D12_HEAP_FLAG_NONE,
 			&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize),
 			D3D12_RESOURCE_STATE_COPY_DEST,
 			nullptr,
 			IID_PPV_ARGS(&m_indexBuffer)));
-			*/
 
 
 		
@@ -316,10 +311,9 @@ void D3D12HelloConstBuffers::LoadAssets()
 			&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize),
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
-			IID_PPV_ARGS(&m_indexBuffer)));//UploadHeap)));
+			IID_PPV_ARGS(&m_indexBufferUploadHeap)));
 		NAME_D3D12_OBJECT(m_indexBuffer);
 
-		/*
 		m_indexBufferDataFuck = {};
 		m_indexBufferDataFuck.pData = (BYTE*)indices;
 		m_indexBufferDataFuck.RowPitch = indexBufferSize;
@@ -327,12 +321,13 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 		UpdateSubresources(m_commandList.Get(), m_indexBuffer.Get(), m_indexBufferUploadHeap.Get(), 0, 0, 1, &m_indexBufferDataFuck);
 		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER));
-		*/
-		UINT8* pIndexDataBegin;
+		
+		
+		/*UINT8* pIndexDataBegin;
 		CD3DX12_RANGE readRange2(0, 0);		// We do not intend to read from this resource on the CPU.
 		ThrowIfFailed(m_indexBuffer->Map(0, &readRange2, reinterpret_cast<void**>(&pIndexDataBegin)));
 		memcpy(pIndexDataBegin, indices, sizeof(indices));
-		m_indexBuffer->Unmap(0, nullptr);
+		m_indexBuffer->Unmap(0, nullptr);*/
 
 		// Initialize the index buffer view.
 		m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
@@ -362,7 +357,9 @@ void D3D12HelloConstBuffers::LoadAssets()
 		ThrowIfFailed(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_pCbvDataBegin)));
 		memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 	}
-
+	ThrowIfFailed(m_commandList->Close());
+	ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 	// Create synchronization objects and wait until assets have been uploaded to the GPU.
 	{
 		ThrowIfFailed(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
@@ -392,7 +389,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 
     m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
 	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
-	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  0.0f };
+	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  -2.0f };
 	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };
 
 	m_constantBufferData.projection.r[0] = { 1.0f, 0.0f, 0.0f, 0.0f };
@@ -464,9 +461,9 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	//m_commandList->IASetIndexBuffer(&m_indexBufferView);
-	//m_commandList->DrawIndexedInstanced(12, 1, 0, 0, 0);
-	m_commandList->DrawInstanced(3, 1, 0, 0);
+	m_commandList->IASetIndexBuffer(&m_indexBufferView);
+	m_commandList->DrawIndexedInstanced(12, 1, 0, 0, 0);
+	//m_commandList->DrawInstanced(3, 1, 0, 0);
 
 	// Indicate that the back buffer will now be used to present.
 	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));

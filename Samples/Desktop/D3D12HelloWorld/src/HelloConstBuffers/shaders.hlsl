@@ -27,12 +27,13 @@ PSInput VSMain(float4 position : POSITION, float4 color : COLOR)
 
 	/*float4x4 t_proj = transpose(projection);
 	float4x4 t_mod = transpose(model);
-	float4x4 mat = mul(t_proj, t_mod);
+	float4x4 mat = mul(t_proj, t_mod);*/
 
-	result.position = mul(mat, position);
+
+
+	result.position = mul(model, position);
 	result.position /= result.position.w;
-	*/
-	result.position = position;
+
 	result.color = color;
 
 	return result;
