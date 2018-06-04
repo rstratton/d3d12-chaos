@@ -32,15 +32,17 @@ public:
 	virtual void OnRender();
 	virtual void OnDestroy();
 
-private:
 	static const UINT FrameCount = 2;
 
 	struct Vertex
 	{
 		XMFLOAT3 position;
 		XMFLOAT4 color;
+		XMFLOAT3 normal;
+		XMFLOAT2 texCoord;
 	};
 
+private:
 	struct SceneConstantBuffer
 	{
 		XMMATRIX model;
@@ -58,6 +60,7 @@ private:
 	ComPtr<ID3D12RootSignature> m_rootSignature;
 	ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
 	ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
+
 	ComPtr<ID3D12PipelineState> m_pipelineState;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList;
 	UINT m_rtvDescriptorSize;
@@ -72,6 +75,8 @@ private:
 	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
 	D3D12_SUBRESOURCE_DATA m_indexBufferDataFuck;
 	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+
+	ComPtr<ID3D12Resource> m_texture;
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
 	UINT8* m_pCbvDataBegin;
@@ -84,6 +89,8 @@ private:
 
 	void LoadPipeline();
 	void LoadAssets();
+	void SetupRS();
+	void SetupPSO();
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 };
