@@ -14,6 +14,8 @@
 #include "DXSample.h"
 
 using namespace DirectX;
+#define USE_NORMALS_AND_TEXCOORDS 0
+#define USE_INDEX_BUFFER 0
 
 // Note that while ComPtr is used to manage the lifetime of resources on the CPU,
 // it has no understanding of the lifetime of resources on the GPU. Apps must account
@@ -38,8 +40,10 @@ public:
 	{
 		XMFLOAT3 position;
 		XMFLOAT4 color;
+#if USE_NORMALS_AND_TEXCOORDS
 		XMFLOAT3 normal;
 		XMFLOAT2 texCoord;
+#endif
 	};
 
 private:
@@ -69,14 +73,18 @@ private:
 	// App resources.
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
+	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+#if USE_INDEX_BUFFER
 	ComPtr<ID3D12Resource> m_indexBuffer;
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
 	ComPtr<ID3D12Resource> m_indexBufferUploadHeap;
-	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
 	D3D12_SUBRESOURCE_DATA m_indexBufferDataFuck;
-	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+#endif
 
+#if USE_NORMALS_AND_TEXCOORDS
 	ComPtr<ID3D12Resource> m_texture;
+#endif
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
 	UINT8* m_pCbvDataBegin;
@@ -89,6 +97,19 @@ private:
 
 	void LoadPipeline();
 	void LoadAssets();
+
+	void CloseSubmitResetAndWait()
+	{
+		ThrowIfFailed(m_commandList->Close());
+		ID3D12CommandList* ppCommandLists2[] = { m_commandList.Get() };
+		m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists2), ppCommandLists2);
+		WaitForPreviousFrame();
+
+		ThrowIfFailed(m_commandAllocator->Reset());
+
+		ThrowIfFailed(m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
+	}
+
 	void SetupRS();
 	void SetupPSO();
 	void PopulateCommandList();

@@ -14,18 +14,18 @@ cbuffer SceneConstantBuffer : register(b0)
 	float4x4 model;
 	float4x4 projection;
 };
-
+/*
 
 Texture2D g_texture : register(t0);
 SamplerState g_sampler : register(s0);
-
+*/
 struct PSInput
 {
 	float4 position : SV_POSITION;
 	float4 color : COLOR;
 };
 
-PSInput VSMain(float4 position : POSITION, float4 color : COLOR, float4 normal : NORMAL, float4 texCoord : TEXCOORD)
+PSInput VSMain(float4 position : POSITION, float4 color : COLOR/*, float4 normal : NORMAL, float4 texCoord : TEXCOORD*/)
 {
 	PSInput result;
 
