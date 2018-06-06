@@ -10,7 +10,21 @@
 //*********************************************************
 
 #include "stdafx.h"
+#include <windows.h>
+#include <objidl.h>
+#include <gdiplus.h>
 #include "D3D12HelloConstBuffers.h"
+
+#include <vector>
+#include <fstream>
+#include <string>
+#include <sstream>
+using std::vector;
+using std::string;
+using std::istringstream;
+
+typedef D3D12HelloConstBuffers::Vertex Vertex;
+
 
 D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wstring name) :
 	DXSample(width, height, name),
@@ -19,8 +33,14 @@ D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wst
 	m_viewport(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)),
 	m_scissorRect(0, 0, static_cast<LONG>(width), static_cast<LONG>(height)),
 	m_rtvDescriptorSize(0),
-	m_constantBufferData{}
+	m_constantBufferData{},
+	m_angle(0.0f)
+
 {
+	Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+	ULONG_PTR gdiplusToken;
+	// Initialize GDI+.
+	Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 }
 
 void D3D12HelloConstBuffers::OnInit()
@@ -145,6 +165,147 @@ void D3D12HelloConstBuffers::LoadPipeline()
 	ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)));
 }
 
+struct ObjVert {
+	float x, y, z;
+};
+
+struct ObjTexCoord {
+	float u, v;
+};
+
+struct ObjVertNorm {
+	float x, y, z;
+};
+
+struct ObjVertBundle {
+	ObjVert vertex;
+	ObjTexCoord texCoord;
+	ObjVertNorm normal;
+};
+
+struct ObjFace {
+	vector<ObjVertBundle> vertices;
+};
+
+Vertex vertBundleToVert(ObjVertBundle bundle) {
+	Vertex v;
+	v.position.x = bundle.vertex.x;
+	v.position.y = bundle.vertex.y;
+	v.position.z = bundle.vertex.z;
+
+	v.color.x = 0.f;
+	v.color.y = 0.f;
+	v.color.z = 0.f;
+	v.color.w = 0.f;
+#if USE_NORMALS_AND_TEXCOORDS
+	v.normal.x = bundle.normal.x;
+	v.normal.y = bundle.normal.y;
+	v.normal.z = bundle.normal.z;
+
+	v.texCoord.x = bundle.texCoord.u;
+	v.texCoord.y = bundle.texCoord.v;
+#endif
+	return v;
+}
+
+void objToBuffers(vector<ObjFace> faces, Vertex** vb, short** ib, UINT& vbSize, UINT& ibSize) {
+	vector<Vertex> vertices;
+
+	for (int i = 0; i < faces.size(); ++i) {
+		ObjFace face = faces[i];
+
+		for (int j = 1; j < face.vertices.size() - 1; ++j) {
+			vertices.push_back(vertBundleToVert(face.vertices[0]));
+			vertices.push_back(vertBundleToVert(face.vertices[j]));
+			vertices.push_back(vertBundleToVert(face.vertices[j + 1]));
+		}
+	}
+
+	*vb = new Vertex[vertices.size()];
+	*ib = new short[vertices.size()];
+
+	for (short i = 0; i < vertices.size(); ++i) {
+		(*vb)[i] = vertices[i];
+		(*ib)[i] = i;
+	}
+
+	vbSize = vertices.size() * sizeof(Vertex);
+	ibSize = vertices.size() * sizeof(short);
+}
+
+vector<ObjFace> parseOBJ(string fname) {
+	using namespace std;
+	ifstream file(fname);
+	string str;
+
+	vector<ObjVert> vertices;
+	vector<ObjTexCoord> texes;
+	vector<ObjVertNorm> normals;
+	vector<ObjVertBundle> bundles;
+	vector<ObjFace> faces;
+
+	while (getline(file, str)) {
+		if (str[0] == '#') {
+			continue;
+		}
+
+		istringstream iss(str);
+		string prefix;
+		iss >> prefix;
+
+		if (prefix == "v") {
+			ObjVert vert;
+			iss >> vert.x;
+			iss >> vert.y;
+			iss >> vert.z;
+			vertices.push_back(vert);
+		}
+		else if (prefix == "vt") {
+			ObjTexCoord tex;
+			iss >> tex.u;
+			iss >> tex.v;
+			texes.push_back(tex);
+		}
+		else if (prefix == "vn") {
+			ObjVertNorm normal;
+			iss >> normal.x;
+			iss >> normal.y;
+			iss >> normal.z;
+			normals.push_back(normal);
+		}
+		else if (prefix == "f") {
+			ObjFace face;
+			string vertBundleString;
+			for (int i = 0; i < 5; ++i) {
+				iss >> vertBundleString;
+
+				stringstream vertBundleStream(vertBundleString);
+				string segment;
+				std::vector<string> seglist;
+
+				while (getline(vertBundleStream, segment, '/')) {
+					seglist.push_back(segment);
+				}
+
+				int vertIdx = stoi(seglist[0]) - 1;
+				int texIdx = stoi(seglist[1]) - 1;
+				int normIdx = stoi(seglist[2]) - 1;
+
+				face.vertices.push_back(
+					ObjVertBundle{
+						vertices[vertIdx],
+						texes[texIdx],
+						normals[normIdx]
+					}
+				);
+			}
+			faces.push_back(face);
+		}
+	}
+
+	return faces;
+}
+
 // Load the sample assets.
 void D3D12HelloConstBuffers::LoadAssets()
 {
@@ -160,11 +321,37 @@ void D3D12HelloConstBuffers::LoadAssets()
 			featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 		}
 
-		CD3DX12_DESCRIPTOR_RANGE1 ranges[1];
-		CD3DX12_ROOT_PARAMETER1 rootParameters[1];
+#if USE_NORMALS_AND_TEXCOORDS
+#define NUM_ROOT_DESCRIPTORS 2
+#else
+#define NUM_ROOT_DESCRIPTORS 1
+#endif 
+		CD3DX12_DESCRIPTOR_RANGE1 ranges[NUM_ROOT_DESCRIPTORS];
+		CD3DX12_ROOT_PARAMETER1 rootParameters[NUM_ROOT_DESCRIPTORS];
 
 		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
 		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_VERTEX);
+
+#if USE_NORMALS_AND_TEXCOORDS
+		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+		rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_PIXEL);
+
+		D3D12_STATIC_SAMPLER_DESC sampler = {};
+		sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.MipLODBias = 0;
+		sampler.MaxAnisotropy = 0;
+		sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+		sampler.MinLOD = 0.0f;
+		sampler.MaxLOD = D3D12_FLOAT32_MAX;
+		sampler.ShaderRegister = 0;
+		sampler.RegisterSpace = 0;
+		sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+#endif
+
 
 		// Allow input layout and deny uneccessary access to certain pipeline stages.
 		D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
@@ -175,7 +362,11 @@ void D3D12HelloConstBuffers::LoadAssets()
 			D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
 		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
+#if USE_NORMALS_AND_TEXCOORDS
+		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 1, &sampler, rootSignatureFlags);
+#else 
 		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, rootSignatureFlags);
+#endif 
 
 		ComPtr<ID3DBlob> signature;
 		ComPtr<ID3DBlob> error;
@@ -204,6 +395,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
+		CD3DX12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;
 
 		// Describe and create the graphics pipeline state object (PSO).
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -211,7 +404,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 		psoDesc.pRootSignature = m_rootSignature.Get();
 		psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
 		psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
-		psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		psoDesc.RasterizerState = rasterizerDesc;
 		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 		psoDesc.DepthStencilState.DepthEnable = FALSE;
 		psoDesc.DepthStencilState.StencilEnable = FALSE;
@@ -229,10 +422,10 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 	// Command lists are created in the recording state, but there is nothing
 	// to record yet. The main loop expects it to be closed, so close it now.
-	ThrowIfFailed(m_commandList->Close());
 
 	// Create the vertex buffer.
 	{
+#if 0
 		// Define the geometry for a triangle.
 		Vertex triangleVertices[] =
 		{
@@ -266,6 +459,48 @@ void D3D12HelloConstBuffers::LoadAssets()
 		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+#else		
+		UINT vertexBufferSize;
+		UINT indexBufferSize;
+		Vertex* triangleVertices;
+		short* indices;
+
+		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
+		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
+
+		// Note: using upload heaps to transfer static data like vert buffers is not 
+		// recommended. Every time the GPU needs it, the upload heap will be marshalled 
+		// over. Please read up on Default Heap usage. An upload heap is used here for 
+		// code simplicity and because there are very few verts to actually transfer.
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			nullptr,
+			IID_PPV_ARGS(&m_vertexBuffer)));
+
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_vertexBufferUploadHeap)));
+
+		m_vertexBufferDataFuck = {};
+		m_vertexBufferDataFuck.pData = (BYTE*)triangleVertices;
+		m_vertexBufferDataFuck.RowPitch = vertexBufferSize;
+		m_vertexBufferDataFuck.SlicePitch = vertexBufferSize;
+		// Copy the triangle data to the vertex buffer.
+		UpdateSubresources<1>(m_commandList.Get(), m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &m_vertexBufferDataFuck);
+		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+		// Initialize the vertex buffer view.
+		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
+		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
+		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+#endif
 	}
 
 	// Create the constant buffer.
@@ -290,7 +525,10 @@ void D3D12HelloConstBuffers::LoadAssets()
 		ThrowIfFailed(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_pCbvDataBegin)));
 		memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 	}
+	ThrowIfFailed(m_commandList->Close());
 
+	ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 	// Create synchronization objects and wait until assets have been uploaded to the GPU.
 	{
 		ThrowIfFailed(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
@@ -316,11 +554,18 @@ void D3D12HelloConstBuffers::OnUpdate()
 	const float translationSpeed = 0.005f;
 	const float offsetBounds = 1.25f;
 
-	m_constantBufferData.offset.x += translationSpeed;
-	if (m_constantBufferData.offset.x > offsetBounds)
-	{
-		m_constantBufferData.offset.x = -offsetBounds;
-	}
+	m_angle += 0.01f;
+
+	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
+	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
+	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  5.0f };
+	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };
+
+	m_constantBufferData.projection.r[0] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	m_constantBufferData.projection.r[1] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	m_constantBufferData.projection.r[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
+	m_constantBufferData.projection.r[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
+
 	memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }
 
@@ -383,7 +628,7 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	m_commandList->DrawInstanced(3, 1, 0, 0);
+	m_commandList->DrawInstanced(m_vertexBufferView.SizeInBytes / sizeof(Vertex), 1, 0, 0);
 
 	// Indicate that the back buffer will now be used to present.
 	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));

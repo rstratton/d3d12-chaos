@@ -11,7 +11,8 @@
 
 cbuffer SceneConstantBuffer : register(b0)
 {
-	float4 offset;
+	float4x4 model;
+	float4x4 projection;
 };
 
 struct PSInput
@@ -24,7 +25,13 @@ PSInput VSMain(float4 position : POSITION, float4 color : COLOR)
 {
 	PSInput result;
 
-	result.position = position + offset;
+	float4x4 t_proj = transpose(projection);
+	float4x4 t_mod = transpose(model);
+	float4x4 mat = mul(t_proj, t_mod);
+
+	result.position = mul(mat, position);
+	result.position /= result.position.w;
+	color.w = 1.0;
 	result.color = color;
 
 	return result;

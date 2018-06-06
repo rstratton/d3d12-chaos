@@ -22,6 +22,8 @@ using namespace DirectX;
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
 
+#define USE_NORMALS_AND_TEXCOORDS 0
+
 class D3D12HelloConstBuffers : public DXSample
 {
 public:
@@ -32,7 +34,6 @@ public:
 	virtual void OnRender();
 	virtual void OnDestroy();
 
-private:
 	static const UINT FrameCount = 2;
 
 	struct Vertex
@@ -43,7 +44,8 @@ private:
 
 	struct SceneConstantBuffer
 	{
-		XMFLOAT4 offset;
+		XMMATRIX model;
+		XMMATRIX projection;
 	};
 
 	// Pipeline objects.
@@ -60,10 +62,15 @@ private:
 	ComPtr<ID3D12PipelineState> m_pipelineState;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList;
 	UINT m_rtvDescriptorSize;
+	float m_angle;
+
 
 	// App resources.
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
+	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
 	UINT8* m_pCbvDataBegin;
