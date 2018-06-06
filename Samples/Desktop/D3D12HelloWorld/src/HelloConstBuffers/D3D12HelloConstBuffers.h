@@ -87,6 +87,10 @@ public:
 	HANDLE m_fenceEvent;
 	ComPtr<ID3D12Fence> m_fence;
 	UINT64 m_fenceValue;
+	UINT m_cbvSrvDescriptorSize;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE m_cbvSrvHandle;	// Move past the SRV in slot 1.
+
 
 	void LoadPipeline();
 	void LoadAssets();
