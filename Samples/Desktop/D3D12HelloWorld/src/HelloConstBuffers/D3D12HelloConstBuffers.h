@@ -22,7 +22,7 @@ using namespace DirectX;
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
 
-#define USE_NORMALS_AND_TEXCOORDS 0
+#define USE_NORMALS_AND_TEXCOORDS 1
 
 class D3D12HelloConstBuffers : public DXSample
 {
@@ -40,6 +40,10 @@ public:
 	{
 		XMFLOAT3 position;
 		XMFLOAT4 color;
+#if USE_NORMALS_AND_TEXCOORDS
+		XMFLOAT3 normal;
+		XMFLOAT2 texCoord;
+#endif
 	};
 
 	struct SceneConstantBuffer
@@ -70,6 +74,9 @@ public:
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
 	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+#if USE_NORMALS_AND_TEXCOORDS
+	ComPtr<ID3D12Resource> m_texture;
+#endif
 
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
@@ -83,6 +90,10 @@ public:
 
 	void LoadPipeline();
 	void LoadAssets();
+
+	void CreateConstantBuffer();
+
+
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 };
