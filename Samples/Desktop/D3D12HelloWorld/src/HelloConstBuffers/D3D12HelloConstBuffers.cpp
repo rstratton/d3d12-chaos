@@ -332,7 +332,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 		CD3DX12_ROOT_PARAMETER1 rootParameters[NUM_ROOT_DESCRIPTORS];
 
 		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-		rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_VERTEX);
+		rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
 
 #if USE_NORMALS_AND_TEXCOORDS
 		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
@@ -380,6 +380,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 	{
 		ComPtr<ID3DBlob> vertexShader;
 		ComPtr<ID3DBlob> pixelShader;
+		ComPtr<ID3DBlob> error;
+		char *error2;
 
 #if defined(_DEBUG)
 		// Enable better shader debugging with the graphics debugging tools.
@@ -388,8 +390,10 @@ void D3D12HelloConstBuffers::LoadAssets()
 		UINT compileFlags = 0;
 #endif
 
-		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-		ThrowIfFailed(D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
+		D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, &error);
+		error2 = (char*)error->GetBufferPointer();
+		D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, &error);
+		error2 = (char*)error->GetBufferPointer();
 
 		// Define the vertex input layout.
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
@@ -520,6 +524,8 @@ void D3D12HelloConstBuffers::OnUpdate()
 	m_constantBufferData.projection.r[1] = { 0.0f, m_aspectRatio, 0.0f, 0.0f };
 	m_constantBufferData.projection.r[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
 	m_constantBufferData.projection.r[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+	m_constantBufferData.lightpos = { 1.0f, 1.0f, 2.0f };
 
 	memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }

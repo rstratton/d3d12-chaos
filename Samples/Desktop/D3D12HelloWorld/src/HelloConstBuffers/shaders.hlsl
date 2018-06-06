@@ -13,6 +13,7 @@ cbuffer SceneConstantBuffer : register(b0)
 {
 	float4x4 model;
 	float4x4 projection;
+	float3 lightpos;
 };
 
 
@@ -22,6 +23,7 @@ struct PSInput
 	float4 color : COLOR;
 	float4 normal : NORMAL;
 	float4 texCoord : TEXCOORD0;
+	float4 worldpos : TEXCOORD1;
 };
 
 PSInput VSMain(float4 position : POSITION, float4 color : COLOR, float4 normal : NORMAL, float4 texCoord : TEXCOORD)
@@ -36,8 +38,9 @@ PSInput VSMain(float4 position : POSITION, float4 color : COLOR, float4 normal :
 	result.position /= result.position.w;
 	color.w = 1.0;
 	result.color = color;
-	result.normal = normal;
+	result.normal = mul(t_mod, float4(normal.xyz, 0));
 	result.texCoord = texCoord;
+	result.worldpos = mul(t_mod, position);
 
 	return result;
 }
@@ -47,5 +50,6 @@ SamplerState g_sampler : register(s0);
 
 float4 PSMain(PSInput input) : SV_TARGET
 {
-	return g_texture.Sample(g_sampler, input.texCoord);
+	float3 lightdir = normalize(lightpos - input.worldpos);
+	return g_texture.Sample(g_sampler, input.texCoord) * mul(input.normal, lightdir);
 }

@@ -50,6 +50,7 @@ public:
 	{
 		XMMATRIX model;
 		XMMATRIX projection;
+		XMFLOAT3 lightpos;
 	};
 
 	// Pipeline objects.
