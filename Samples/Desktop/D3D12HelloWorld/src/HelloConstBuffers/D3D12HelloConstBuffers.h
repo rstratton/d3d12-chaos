@@ -65,6 +65,7 @@ public:
 	ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
 	ComPtr<ID3D12PipelineState> m_pipelineState;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList;
+	ComPtr<ID3D12Resource> m_textureUploadHeap;
 	UINT m_rtvDescriptorSize;
 	float m_angle;
 
@@ -96,8 +97,12 @@ public:
 	void LoadAssets();
 
 	void CreateConstantBuffer();
-
+	void CreateTextureResource();
 
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 };
+
+void CreateTextureResource();
+
+void CreateTextureResource();

@@ -402,7 +402,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 #endif
 		};
 		CD3DX12_RASTERIZER_DESC rasterizerDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-		rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;
+		rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
 
 		// Describe and create the graphics pipeline state object (PSO).
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -426,85 +426,11 @@ void D3D12HelloConstBuffers::LoadAssets()
 	// Create the command list.
 	ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList)));
 
-	// Command lists are created in the recording state, but there is nothing
-	// to record yet. The main loop expects it to be closed, so close it now.
+
 	m_cbvSrvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-#if USE_NORMALS_AND_TEXCOORDS
+	CreateTextureResource();
 
-	ComPtr<ID3D12Resource> textureUploadHeap;
-	{
-		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp", false);
-		Bitmap &t = *tp;
-		const int h = t.GetHeight();
-		const int w = t.GetWidth();
-
-		BYTE* mytexturedata = new BYTE[h*w * 4];
-		for (int i = 0; i < h; i++)
-			for (int j = 0; j < w; j++)
-			{
-				Color c;
-				t.GetPixel(i, j, &c);
-				mytexturedata[i*w * 4 + j * 4] = c.GetR();
-				mytexturedata[i*w * 4 + j * 4 + 1] = c.GetG();
-				mytexturedata[i*w * 4 + j * 4 + 2] = c.GetB();
-				mytexturedata[i*w * 4 + j * 4 + 3] = c.GetA();
-			}
-
-
-		// Create the texture.
-		// Describe and create a Texture2D.
-		D3D12_RESOURCE_DESC textureDesc = {};
-		textureDesc.MipLevels = 1;
-		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		textureDesc.Width = w;
-		textureDesc.Height = h;
-		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-		textureDesc.DepthOrArraySize = 1;
-		textureDesc.SampleDesc.Count = 1;
-		textureDesc.SampleDesc.Quality = 0;
-		textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-			D3D12_HEAP_FLAG_NONE,
-			&textureDesc,
-			D3D12_RESOURCE_STATE_COPY_DEST,
-			nullptr,
-			IID_PPV_ARGS(&m_texture)));
-
-		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, 1);
-
-		// Create the GPU upload buffer.
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&textureUploadHeap)));
-
-		D3D12_SUBRESOURCE_DATA textureData = {};
-		textureData.pData = &mytexturedata[0];
-		textureData.RowPitch = w * sizeof(Color);
-		textureData.SlicePitch = textureData.RowPitch * h;
-
-		UpdateSubresources(m_commandList.Get(), m_texture.Get(), textureUploadHeap.Get(), 0, 0, 1, &textureData);
-		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-
-		// Describe and create a SRV for the texture.
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Format = textureDesc.Format;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-		auto orig_handle = m_cbvHeap->GetCPUDescriptorHandleForHeapStart();
-		m_cbvSrvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(orig_handle, 0, m_cbvSrvDescriptorSize);
-		m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, m_cbvSrvHandle);
-		m_cbvSrvHandle.Offset(1, m_cbvSrvDescriptorSize);
-	}
-
-#endif
 
 	// Create the vertex buffer.
 	{	
@@ -549,28 +475,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
 	}
-	// Create the constant buffer.
-	{
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(1024 * 64),
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&m_constantBuffer)));
 
-		// Describe and create a constant buffer view.
-		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
-		cbvDesc.BufferLocation = m_constantBuffer->GetGPUVirtualAddress();
-		cbvDesc.SizeInBytes = (sizeof(SceneConstantBuffer) + 255) & ~255;	// CB size is required to be 256-byte aligned.
-		m_device->CreateConstantBufferView(&cbvDesc, m_cbvSrvHandle);
-
-		// Map and initialize the constant buffer. We don't unmap this until the
-		// app closes. Keeping things mapped for the lifetime of the resource is okay.
-		CD3DX12_RANGE readRange(0, 0);		// We do not intend to read from this resource on the CPU.
-		ThrowIfFailed(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_pCbvDataBegin)));
-		memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
-	}
+	CreateConstantBuffer();
 
 	ThrowIfFailed(m_commandList->Close());
 
@@ -606,10 +512,12 @@ void D3D12HelloConstBuffers::OnUpdate()
 	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
 	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
 	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  5.0f };
-	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };
+	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };	
+
+
 
 	m_constantBufferData.projection.r[0] = { 1.0f, 0.0f, 0.0f, 0.0f };
-	m_constantBufferData.projection.r[1] = { 0.0f, 1.0f, 0.0f, 0.0f };
+	m_constantBufferData.projection.r[1] = { 0.0f, m_aspectRatio, 0.0f, 0.0f };
 	m_constantBufferData.projection.r[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
 	m_constantBufferData.projection.r[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
 
@@ -641,11 +549,6 @@ void D3D12HelloConstBuffers::OnDestroy()
 	CloseHandle(m_fenceEvent);
 }
 
-void D3D12HelloConstBuffers::CreateConstantBuffer()
-{
-
-}
-
 // Fill the command list with all the render commands and dependent state.
 void D3D12HelloConstBuffers::PopulateCommandList()
 {
@@ -665,7 +568,11 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 	ID3D12DescriptorHeap* ppHeaps[] = { m_cbvHeap.Get() };
 	m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-	m_commandList->SetGraphicsRootDescriptorTable(0, m_cbvHeap->GetGPUDescriptorHandleForHeapStart());
+	auto handle = m_cbvHeap->GetGPUDescriptorHandleForHeapStart();
+	m_commandList->SetGraphicsRootDescriptorTable(0, handle);
+	auto new_handle = CD3DX12_GPU_DESCRIPTOR_HANDLE(handle, m_cbvSrvDescriptorSize);
+	m_commandList->SetGraphicsRootDescriptorTable(1, new_handle);
+
 	m_commandList->RSSetViewports(1, &m_viewport);
 	m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
@@ -708,4 +615,110 @@ void D3D12HelloConstBuffers::WaitForPreviousFrame()
 	}
 
 	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+}
+
+
+void D3D12HelloConstBuffers::CreateConstantBuffer()
+{
+	// Create the constant buffer.
+	{
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(1024 * 64),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_constantBuffer)));
+
+		// Describe and create a constant buffer view.
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+		cbvDesc.BufferLocation = m_constantBuffer->GetGPUVirtualAddress();
+		cbvDesc.SizeInBytes = (sizeof(SceneConstantBuffer) + 255) & ~255;	// CB size is required to be 256-byte aligned.
+		m_device->CreateConstantBufferView(&cbvDesc, m_cbvSrvHandle);
+
+		// Map and initialize the constant buffer. We don't unmap this until the
+		// app closes. Keeping things mapped for the lifetime of the resource is okay.
+		CD3DX12_RANGE readRange(0, 0);		// We do not intend to read from this resource on the CPU.
+		ThrowIfFailed(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_pCbvDataBegin)));
+		memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
+	}
+
+}
+
+void D3D12HelloConstBuffers::CreateTextureResource()
+{
+#if USE_NORMALS_AND_TEXCOORDS
+
+	{
+		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp", false);
+		Bitmap &t = *tp;
+		const int h = t.GetHeight();
+		const int w = t.GetWidth();
+
+		BYTE* mytexturedata = new BYTE[h*w * 4];
+		for (int i = 0; i < h; i++)
+			for (int j = 0; j < w; j++)
+			{
+				Color c;
+				t.GetPixel(j, i, &c);
+				mytexturedata[i*w * 4 + j * 4] = c.GetR();
+				mytexturedata[i*w * 4 + j * 4 + 1] = c.GetG();
+				mytexturedata[i*w * 4 + j * 4 + 2] = c.GetB();
+				mytexturedata[i*w * 4 + j * 4 + 3] = c.GetA();
+			}
+
+
+		// Create the texture.
+		// Describe and create a Texture2D.
+		D3D12_RESOURCE_DESC textureDesc = {};
+		textureDesc.MipLevels = 1;
+		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		textureDesc.Width = w;
+		textureDesc.Height = h;
+		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+		textureDesc.DepthOrArraySize = 1;
+		textureDesc.SampleDesc.Count = 1;
+		textureDesc.SampleDesc.Quality = 0;
+		textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&textureDesc,
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			nullptr,
+			IID_PPV_ARGS(&m_texture)));
+
+		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, 1);
+
+		// Create the GPU upload buffer.
+		ThrowIfFailed(m_device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_textureUploadHeap)));
+
+		D3D12_SUBRESOURCE_DATA textureData = {};
+		textureData.pData = &mytexturedata[0];
+		textureData.RowPitch = w * sizeof(Color);
+		textureData.SlicePitch = textureData.RowPitch * h;
+
+		UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, 0, 1, &textureData);
+		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+		// Describe and create a SRV for the texture.
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = textureDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = 1;
+		auto orig_handle = m_cbvHeap->GetCPUDescriptorHandleForHeapStart();
+		m_cbvSrvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(orig_handle, 0, m_cbvSrvDescriptorSize);
+		m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, m_cbvSrvHandle);
+		m_cbvSrvHandle.Offset(1, m_cbvSrvDescriptorSize);
+	}
+
+#endif
 }
