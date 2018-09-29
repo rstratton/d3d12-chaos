@@ -23,6 +23,7 @@ using namespace DirectX;
 using Microsoft::WRL::ComPtr;
 
 #define USE_NORMALS_AND_TEXCOORDS 1
+#define USE_MSAA 1
 
 class D3D12HelloConstBuffers : public DXSample
 {

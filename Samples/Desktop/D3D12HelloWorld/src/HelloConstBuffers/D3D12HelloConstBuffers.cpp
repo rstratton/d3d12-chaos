@@ -422,8 +422,14 @@ void D3D12HelloConstBuffers::LoadAssets()
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 		psoDesc.NumRenderTargets = 1;
 		psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-		psoDesc.SampleDesc.Count = 1;
 
+#if USE_MSAA
+		psoDesc.SampleDesc.Count = 4;
+		psoDesc.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
+#else
+		psoDesc.SampleDesc.Count = 1;
+		psoDesc.SampleDesc.Quality = 0;
+#endif
 		ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
 	}
 
@@ -443,7 +449,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc.LAPTOP-MQBKDJV9\\Downloads\\obj-samples\\dodecahedron.obj");
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
 		// Note: using upload heaps to transfer static data like vert buffers is not 
@@ -656,7 +662,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp", false);
+		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc.LAPTOP-MQBKDJV9\\Downloads\\obj-samples\\dodecahedron.bmp", false);
 		Bitmap &t = *tp;
 		const int h = t.GetHeight();
 		const int w = t.GetWidth();
@@ -725,6 +731,6 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 		m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, m_cbvSrvHandle);
 		m_cbvSrvHandle.Offset(1, m_cbvSrvDescriptorSize);
 	}
-
 #endif
+
 }
