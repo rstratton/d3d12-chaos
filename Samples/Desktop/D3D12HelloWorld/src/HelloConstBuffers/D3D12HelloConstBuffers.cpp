@@ -733,4 +733,27 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 	}
 #endif
 
+#if USE_MSAA
+	// Create the texture.
+	// Describe and create a Texture2D.
+	D3D12_RESOURCE_DESC textureDescMSAA = {};
+	textureDescMSAA.MipLevels = 1;
+	textureDescMSAA.Format = DXGI_FORMAT_R10G10B10A2_UNORM; // HDR :3c
+	textureDescMSAA.Width = m_width;
+	textureDescMSAA.Height = m_height;
+	textureDescMSAA.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	textureDescMSAA.DepthOrArraySize = 1;
+	textureDescMSAA.SampleDesc.Count = 4;
+	textureDescMSAA.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
+	textureDescMSAA.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&textureDescMSAA,
+		D3D12_RESOURCE_STATE_RENDER_TARGET,
+		nullptr,
+		IID_PPV_ARGS(&m_texturemsaa)));
+#endif
 }

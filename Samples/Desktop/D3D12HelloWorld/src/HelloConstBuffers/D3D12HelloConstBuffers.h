@@ -80,6 +80,9 @@ public:
 #if USE_NORMALS_AND_TEXCOORDS
 	ComPtr<ID3D12Resource> m_texture;
 #endif
+#if USE_MSAA
+	ComPtr<ID3D12Resource> m_texturemsaa;
+#endif
 
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
