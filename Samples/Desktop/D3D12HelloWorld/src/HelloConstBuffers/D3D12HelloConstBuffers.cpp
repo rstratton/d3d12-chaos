@@ -443,7 +443,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
 		// Note: using upload heaps to transfer static data like vert buffers is not 
@@ -656,7 +657,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp", false);
+		Bitmap *tp = Bitmap::FromFile(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp", false);
 		Bitmap &t = *tp;
 		const int h = t.GetHeight();
 		const int w = t.GetWidth();
