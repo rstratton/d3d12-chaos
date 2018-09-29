@@ -66,11 +66,13 @@ public:
 	ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
 	ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
 	ComPtr<ID3D12PipelineState> m_pipelineState;
+	ComPtr<ID3D12PipelineState> m_tonemapPSO;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList;
 	ComPtr<ID3D12Resource> m_textureUploadHeap;
 	UINT m_rtvDescriptorSize;
 	float m_angle;
 
+	const int kSampleCount = 8; 
 
 	// App resources.
 	ComPtr<ID3D12Resource> m_vertexBuffer;
@@ -82,6 +84,7 @@ public:
 #endif
 #if USE_MSAA
 	ComPtr<ID3D12Resource> m_texturemsaa;
+	ComPtr<ID3D12Resource> m_textureresolve;
 #endif
 
 	ComPtr<ID3D12Resource> m_constantBuffer;
@@ -103,11 +106,8 @@ public:
 
 	void CreateConstantBuffer();
 	void CreateTextureResource();
+	void CreateRTs();
 
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 };
-
-void CreateTextureResource();
-
-void CreateTextureResource();
