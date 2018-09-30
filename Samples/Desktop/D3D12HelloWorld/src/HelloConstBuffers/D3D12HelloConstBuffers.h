@@ -24,6 +24,9 @@ using namespace DirectX;
 // An example of this can be found in the class method: OnDestroy().
 using Microsoft::WRL::ComPtr;
 
+#define USE_NORMALS_AND_TEXCOORDS 1
+#define USE_MSAA 1
+
 class D3D12HelloConstBuffers : public DXSample
 {
 public:
@@ -51,6 +54,7 @@ private:
 	{
 		XMMATRIX model;
 		XMMATRIX projection;
+		XMFLOAT3 lightpos;
 	};
 
 	// Pipeline objects.
@@ -66,25 +70,27 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
 
 	ComPtr<ID3D12PipelineState> m_pipelineState;
+	ComPtr<ID3D12PipelineState> m_tonemapPSO;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList;
+	ComPtr<ID3D12Resource> m_textureUploadHeap;
 	UINT m_rtvDescriptorSize;
 	float m_angle;
+
+	const int kSampleCount = 8; 
 
 	// App resources.
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
 	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
-#if USE_INDEX_BUFFER
-	ComPtr<ID3D12Resource> m_indexBuffer;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
-	ComPtr<ID3D12Resource> m_indexBufferUploadHeap;
-	D3D12_SUBRESOURCE_DATA m_indexBufferDataFuck;
-#endif
-
 #if USE_NORMALS_AND_TEXCOORDS
 	ComPtr<ID3D12Resource> m_texture;
 #endif
+#if USE_MSAA
+	ComPtr<ID3D12Resource> m_texturemsaa;
+	ComPtr<ID3D12Resource> m_textureresolve;
+#endif
+
 	ComPtr<ID3D12Resource> m_constantBuffer;
 	SceneConstantBuffer m_constantBufferData;
 	UINT8* m_pCbvDataBegin;
@@ -94,24 +100,18 @@ private:
 	HANDLE m_fenceEvent;
 	ComPtr<ID3D12Fence> m_fence;
 	UINT64 m_fenceValue;
+	UINT m_cbvSrvDescriptorSize;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE m_cbvSrvHandle;	// Move past the SRV in slot 1.
+
 
 	void LoadPipeline();
 	void LoadAssets();
 
-	void CloseSubmitResetAndWait()
-	{
-		ThrowIfFailed(m_commandList->Close());
-		ID3D12CommandList* ppCommandLists2[] = { m_commandList.Get() };
-		m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists2), ppCommandLists2);
-		WaitForPreviousFrame();
+	void CreateConstantBuffer();
+	void CreateTextureResource();
+	void CreateRTs();
 
-		ThrowIfFailed(m_commandAllocator->Reset());
-
-		ThrowIfFailed(m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
-	}
-
-	void SetupRS();
-	void SetupPSO();
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
 };
