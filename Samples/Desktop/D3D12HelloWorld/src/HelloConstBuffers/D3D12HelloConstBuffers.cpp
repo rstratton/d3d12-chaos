@@ -482,7 +482,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+		//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
 
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
@@ -732,7 +733,8 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-		Bitmap *tp = Bitmap::FromFile(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp", false);
+		//Bitmap *tp = Bitmap::FromFile(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp", false);
+		Bitmap *tp = Bitmap::FromFile(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp", false);
 		Bitmap &t = *tp;
 		const int h = t.GetHeight();
 		const int w = t.GetWidth();
@@ -802,7 +804,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			pitchedDesc.Width = w;
 			pitchedDesc.Height = h;
 			pitchedDesc.Depth = 1;
-			pitchedDesc.RowPitch = Align(this_w * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+			pitchedDesc.RowPitch = Align(w * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
 			D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedTexture2D = { 0 };
 			placedTexture2D.Offset = 0;
@@ -810,14 +812,14 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 
 			memcpy(pUploadHeapData, mytexturedata, this_w*this_h);
 
-			factor *= 2;
 
-			int subresource = D3D12CalcSubresource(i, 0, 0, 3, 1);
+			int subresource = D3D12CalcSubresource(i, 0, 0, kMipLevels, 1);
 
 			CD3DX12_TEXTURE_COPY_LOCATION dstLoc(m_texture.Get(), subresource);
 			CD3DX12_TEXTURE_COPY_LOCATION srcLoc(m_textureUploadHeap.Get(), placedTexture2D);
 			CD3DX12_BOX box(0, 0, 0, w / factor, h / factor, 1);
 			m_commandList->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, &box);
+			factor *= 2;
 
 			//UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, kMipLevels, 1, &textureData);
 		}
@@ -830,7 +832,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = textureDesc.Format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 3;
+		srvDesc.Texture2D.MipLevels = kMipLevels;
 		srvDesc.Texture2D.PlaneSlice = 0;
 		auto orig_handle = m_cbvHeap->GetCPUDescriptorHandleForHeapStart();
 		m_cbvSrvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(orig_handle, 0, m_cbvSrvDescriptorSize);

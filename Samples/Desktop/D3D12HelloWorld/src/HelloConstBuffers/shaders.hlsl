@@ -82,11 +82,11 @@ float4 PSMain(PSInput input) : SV_TARGET
 	result = g_texture.Sample(g_sampler, input.texCoord) * mul(input.normal, lightdir);
 
 	// Fresnel
-	float theta = getTheta(input.worldpos, input.normal);
+	/*float theta = getTheta(input.worldpos, input.normal);
 	float rPerp = rPerpendicular(theta);
 	float rPar = rParallel(theta);
 	float reflectance = (rPerp * rPerp + rPar * rPar) / 2.0f;
-	result += reflectance * float4(0.8f, 0.0f, 0.8f, 0.0f);
+	result += reflectance * float4(0.8f, 0.0f, 0.8f, 0.0f);*/
 
 	return result;
 }
