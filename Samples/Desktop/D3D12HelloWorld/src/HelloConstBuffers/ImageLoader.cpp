@@ -53,10 +53,10 @@ void ImageLoader::generateMipMap(int level) {
 
 	for (int i = 0; i < nextLevel.height; ++i) {
 		for (int j = 0; j < nextLevel.width; ++j) {
-			MipMap::Pixel p1 = lastLevel.getPixel(i, j);
-			MipMap::Pixel p2 = lastLevel.getPixel(i + 1, j);
-			MipMap::Pixel p3 = lastLevel.getPixel(i, j + 1);
-			MipMap::Pixel p4 = lastLevel.getPixel(i + 1, j + 1);
+			MipMap::Pixel p1 = lastLevel.getPixel(i*2, j*2);
+			MipMap::Pixel p2 = lastLevel.getPixel(i*2 + 1, j*2);
+			MipMap::Pixel p3 = lastLevel.getPixel(i*2, j*2 + 1);
+			MipMap::Pixel p4 = lastLevel.getPixel(i*2 + 1, j*2 + 1);
 
 			MipMap::Pixel result = MipMap::Pixel::avg(p1, p2, p3, p4);
 
@@ -103,9 +103,9 @@ inline int MipMap::getByteIndex(int i, int j, MipMap::Channel c) {
 
 MipMap::Pixel MipMap::Pixel::avg(Pixel p1, Pixel p2, Pixel p3, Pixel p4) {
 	return MipMap::Pixel(
-		(BYTE)((p1.r + p2.r + p3.r + p4.r) / 4),
-		(BYTE)((p1.g + p2.g + p3.g + p4.g) / 4),
-		(BYTE)((p1.b + p2.b + p3.b + p4.b) / 4),
-		(BYTE)((p1.a + p2.a + p3.a + p4.a) / 4)
+		(BYTE)((p1.r + p2.r + p3.r + p4.r) / 4.0),
+		(BYTE)((p1.g + p2.g + p3.g + p4.g) / 4.0),
+		(BYTE)((p1.b + p2.b + p3.b + p4.b) / 4.0),
+		(BYTE)((p1.a + p2.a + p3.a + p4.a) / 4.0)
 	 );
 }

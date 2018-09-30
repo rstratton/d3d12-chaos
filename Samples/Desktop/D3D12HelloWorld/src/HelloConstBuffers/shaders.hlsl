@@ -79,7 +79,7 @@ float4 PSMain(PSInput input) : SV_TARGET
 
 	// Diffuse
 	float3 lightdir = normalize(lightpos - input.worldpos);
-	result = g_texture.Sample(g_sampler, input.texCoord) * mul(input.normal, lightdir);
+	result = g_texture.Sample(g_sampler, input.texCoord) *mul(input.normal, lightdir);
 
 	// Fresnel
 	float theta = getTheta(input.worldpos, input.normal);

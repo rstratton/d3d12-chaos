@@ -39,8 +39,8 @@ inline void ThrowIfFailed(HRESULT hr)
 {
     if (FAILED(hr))
     {
-        throw HrException(hr);
-    }
+		throw HrException(hr);
+	}
 }
 
 inline void GetAssetsPath(_Out_writes_(pathSize) WCHAR* path, UINT pathSize)

@@ -483,7 +483,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+		//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
 
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
@@ -556,7 +557,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 
 	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
 	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
-	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  5.0f };
+	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  2.0f };
 	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };	
 
 
@@ -566,7 +567,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 	m_constantBufferData.projection.r[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
 	m_constantBufferData.projection.r[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-	m_constantBufferData.lightpos = { 1.0f, 1.0f, 2.0f };
+	m_constantBufferData.lightpos = { 1.0f, 1.0f, 0.0f };
 
 	memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }
@@ -712,20 +713,39 @@ void D3D12HelloConstBuffers::CreateConstantBuffer()
 
 }
 
+//
+// Align uLocation to the next multiple of uAlign.
+//
+
+UINT Align(UINT uLocation, UINT uAlign)
+{
+	if ((0 == uAlign) || (uAlign & (uAlign - 1)))
+	{
+		//ThrowException("non-pow2 alignment");
+		throw HrException(0);
+
+	}
+
+	return ((uLocation + (uAlign - 1)) & ~(uAlign - 1));
+}
+
 void D3D12HelloConstBuffers::CreateTextureResource()
 {
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-		MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
-		
+	//MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
+		auto loaded = ImageLoader(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp");
+	MipMap mip0 = loaded.getMipMap(0);
+
+
 		// Create the texture.
 		// Describe and create a Texture2D.
 		D3D12_RESOURCE_DESC textureDesc = {};
-		textureDesc.MipLevels = 1;
+		textureDesc.MipLevels = kMipLevels;
 		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		textureDesc.Width = image.width;
-		textureDesc.Height = image.height;
+		textureDesc.Width = mip0.width;
+		textureDesc.Height = mip0.height;
 		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 		textureDesc.DepthOrArraySize = 1;
 		textureDesc.SampleDesc.Count = 1;
@@ -740,7 +760,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			nullptr,
 			IID_PPV_ARGS(&m_texture)));
 
-		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, 1);
+		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, kMipLevels)*10;
 
 		// Create the GPU upload buffer.
 		ThrowIfFailed(m_device->CreateCommittedResource(
@@ -750,13 +770,47 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
 			IID_PPV_ARGS(&m_textureUploadHeap)));
+		void *pUploadHeapData;
+		CD3DX12_RANGE range(0, 0);
+		m_textureUploadHeap->Map(0, &range, &pUploadHeapData);
 
-		D3D12_SUBRESOURCE_DATA textureData = {};
-		textureData.pData = &image.bytes[0];
-		textureData.RowPitch = image.width * sizeof(Color);
-		textureData.SlicePitch = textureData.RowPitch * image.height;
+		int w = mip0.width;
+		int h = mip0.height;
 
-		UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, 0, 1, &textureData);
+		int bytes_written = 0;
+		for (int i = 0; i < kMipLevels; i++)
+		{
+			auto this_mip = loaded.getMipMap(i);
+
+			/*D3D12_SUBRESOURCE_DATA textureData = {};
+			textureData.pData = &mytexturedata[0];
+			textureData.RowPitch = this_w;
+			textureData.SlicePitch = this_h;*/
+
+			D3D12_SUBRESOURCE_FOOTPRINT pitchedDesc = { 0 };
+			pitchedDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			pitchedDesc.Width = this_mip.width;
+			pitchedDesc.Height = this_mip.height;
+			pitchedDesc.Depth = 1;
+			pitchedDesc.RowPitch = Align(this_mip.width * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
+			D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedTexture2D = { 0 };
+			placedTexture2D.Offset = bytes_written;
+			placedTexture2D.Footprint = pitchedDesc;
+
+			int towrite = this_mip.width * this_mip.height * 4;
+			memcpy((char*)pUploadHeapData + bytes_written, this_mip.bytes, towrite);
+			bytes_written += towrite;
+
+			int subresource = D3D12CalcSubresource(i, 0, 0, kMipLevels, 1);
+
+			CD3DX12_TEXTURE_COPY_LOCATION dstLoc(m_texture.Get(), subresource);
+			CD3DX12_TEXTURE_COPY_LOCATION srcLoc(m_textureUploadHeap.Get(), placedTexture2D);
+			//CD3DX12_BOX box(0, 0, 0, w / factor, h / factor, 1);
+			m_commandList->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);//&box);
+
+		}
+
 		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
 		// Describe and create a SRV for the texture.
@@ -764,7 +818,8 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = textureDesc.Format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.MipLevels = kMipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
 		auto orig_handle = m_cbvHeap->GetCPUDescriptorHandleForHeapStart();
 		m_cbvSrvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(orig_handle, 0, m_cbvSrvDescriptorSize);
 		m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, m_cbvSrvHandle);
