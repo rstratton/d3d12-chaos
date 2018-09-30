@@ -566,7 +566,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 	m_constantBufferData.projection.r[2] = { 0.0f, 0.0f, 1.0f, 0.0f };
 	m_constantBufferData.projection.r[3] = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-	m_constantBufferData.lightpos = { 1.0f, 1.0f, 2.0f };
+	m_constantBufferData.lightpos = { 1.0f, 1.0f, 0.0f };
 
 	memcpy(m_pCbvDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 }
