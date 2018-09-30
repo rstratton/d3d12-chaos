@@ -9,6 +9,9 @@
 //
 //*********************************************************
 
+static const float n1 = 1.0f;
+static const float n2 = 1.1f;
+
 cbuffer SceneConstantBuffer : register(b0)
 {
 	float4x4 model;
@@ -48,8 +51,42 @@ PSInput VSMain(float4 position : POSITION, float4 color : COLOR, float4 normal :
 Texture2D g_texture : register(t0);
 SamplerState g_sampler : register(s0);
 
+
+float getTheta(float4 worldPosition, float4 normal)
+{
+	float4 viewVector = -normalize(worldPosition);
+	return acos(mul(viewVector, normal));
+}
+
+float getThetaT(float theta)
+{
+	return asin((n1 * sin(theta)) / n2);
+}
+
+float rPerpendicular(float theta) {
+	float thetaT = getThetaT(theta);
+	return (n1 * cos(theta) - n2 * cos(thetaT)) / (n1 * cos(theta) + n2 * cos(thetaT));
+}
+
+float rParallel(float theta) {
+	float thetaT = getThetaT(theta);
+	return (n2 * cos(theta) - n1 * cos(thetaT)) / (n2 * cos(theta) + n1 * cos(thetaT));
+}
+
 float4 PSMain(PSInput input) : SV_TARGET
 {
+	float4 result;
+
+	// Diffuse
 	float3 lightdir = normalize(lightpos - input.worldpos);
-	return g_texture.Sample(g_sampler, input.texCoord) * mul(input.normal, lightdir);
+	result = g_texture.Sample(g_sampler, input.texCoord) * mul(input.normal, lightdir);
+
+	// Fresnel
+	float theta = getTheta(input.worldpos, input.normal);
+	float rPerp = rPerpendicular(theta);
+	float rPar = rParallel(theta);
+	float reflectance = (rPerp * rPerp + rPar * rPar) / 2.0f;
+	result += reflectance * float4(0.8f, 0.0f, 0.8f, 0.0f);
+
+	return result;
 }

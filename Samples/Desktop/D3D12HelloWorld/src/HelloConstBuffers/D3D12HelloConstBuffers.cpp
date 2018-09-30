@@ -512,7 +512,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 	const float translationSpeed = 0.005f;
 	const float offsetBounds = 1.25f;
 
-	m_angle += 0.01f;
+	m_angle += 0.005f;
 
 	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
 	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
