@@ -555,7 +555,7 @@ void D3D12HelloConstBuffers::OnUpdate()
 
 	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
 	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
-	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  5.0f };
+	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  2.0f };
 	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };	
 
 
@@ -711,6 +711,22 @@ void D3D12HelloConstBuffers::CreateConstantBuffer()
 
 }
 
+//
+// Align uLocation to the next multiple of uAlign.
+//
+
+UINT Align(UINT uLocation, UINT uAlign)
+{
+	if ((0 == uAlign) || (uAlign & (uAlign - 1)))
+	{
+		//ThrowException("non-pow2 alignment");
+		throw HrException(0);
+
+	}
+
+	return ((uLocation + (uAlign - 1)) & ~(uAlign - 1));
+}
+
 void D3D12HelloConstBuffers::CreateTextureResource()
 {
 #if USE_NORMALS_AND_TEXCOORDS
@@ -737,7 +753,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 		// Create the texture.
 		// Describe and create a Texture2D.
 		D3D12_RESOURCE_DESC textureDesc = {};
-		textureDesc.MipLevels = 1;
+		textureDesc.MipLevels = kMipLevels;
 		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		textureDesc.Width = w;
 		textureDesc.Height = h;
@@ -755,7 +771,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			nullptr,
 			IID_PPV_ARGS(&m_texture)));
 
-		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, 1);
+		const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_texture.Get(), 0, kMipLevels)*10;
 
 		// Create the GPU upload buffer.
 		ThrowIfFailed(m_device->CreateCommittedResource(
@@ -765,13 +781,48 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
 			IID_PPV_ARGS(&m_textureUploadHeap)));
+		void *pUploadHeapData;
+		CD3DX12_RANGE range(0, 0);
+		m_textureUploadHeap->Map(0, &range, &pUploadHeapData);
 
-		D3D12_SUBRESOURCE_DATA textureData = {};
-		textureData.pData = &mytexturedata[0];
-		textureData.RowPitch = w * sizeof(Color);
-		textureData.SlicePitch = textureData.RowPitch * h;
 
-		UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, 0, 1, &textureData);
+		int factor = 1;
+		for (int i = 0; i < kMipLevels; i++)
+		{
+			auto this_w = w * sizeof(Color) / factor;
+			auto this_h = h / factor;
+
+			/*D3D12_SUBRESOURCE_DATA textureData = {};
+			textureData.pData = &mytexturedata[0];
+			textureData.RowPitch = this_w;
+			textureData.SlicePitch = this_h;*/
+
+			D3D12_SUBRESOURCE_FOOTPRINT pitchedDesc = { 0 };
+			pitchedDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			pitchedDesc.Width = w;
+			pitchedDesc.Height = h;
+			pitchedDesc.Depth = 1;
+			pitchedDesc.RowPitch = Align(this_w * sizeof(DWORD), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+
+			D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedTexture2D = { 0 };
+			placedTexture2D.Offset = 0;
+			placedTexture2D.Footprint = pitchedDesc;
+
+			memcpy(pUploadHeapData, mytexturedata, this_w*this_h);
+
+			factor *= 2;
+
+			int subresource = D3D12CalcSubresource(i, 0, 0, 3, 1);
+
+			CD3DX12_TEXTURE_COPY_LOCATION dstLoc(m_texture.Get(), subresource);
+			CD3DX12_TEXTURE_COPY_LOCATION srcLoc(m_textureUploadHeap.Get(), placedTexture2D);
+			CD3DX12_BOX box(0, 0, 0, w / factor, h / factor, 1);
+			m_commandList->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, &box);
+
+			//UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, kMipLevels, 1, &textureData);
+		}
+		//UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, kMipLevels, 1, &textureData);
+
 		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
 		// Describe and create a SRV for the texture.
@@ -779,7 +830,8 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = textureDesc.Format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
+		srvDesc.Texture2D.MipLevels = 3;
+		srvDesc.Texture2D.PlaneSlice = 0;
 		auto orig_handle = m_cbvHeap->GetCPUDescriptorHandleForHeapStart();
 		m_cbvSrvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(orig_handle, 0, m_cbvSrvDescriptorSize);
 		m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, m_cbvSrvHandle);

@@ -72,7 +72,8 @@ public:
 	UINT m_rtvDescriptorSize;
 	float m_angle;
 
-	const int kSampleCount = 8; 
+	const int kSampleCount = 8;
+	const int kMipLevels = 3;
 
 	// App resources.
 	ComPtr<ID3D12Resource> m_vertexBuffer;
