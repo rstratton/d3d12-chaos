@@ -112,6 +112,7 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ImageLoader.h" />
     <ClInclude Include="Win32Application.h" />
     <ClInclude Include="D3D12HelloConstBuffers.h" />
     <ClInclude Include="d3dx12.h" />
@@ -120,6 +121,7 @@
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ImageLoader.cpp" />
     <ClCompile Include="Win32Application.cpp" />
     <ClCompile Include="D3D12HelloConstBuffers.cpp" />
     <ClCompile Include="DXSample.cpp" />

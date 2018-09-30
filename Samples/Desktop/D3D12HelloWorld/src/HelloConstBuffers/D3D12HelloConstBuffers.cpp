@@ -14,6 +14,7 @@
 #include <objidl.h>
 #include <gdiplus.h>
 #include "D3D12HelloConstBuffers.h"
+#include "ImageLoader.h"
 
 #include <vector>
 #include <fstream>
@@ -716,31 +717,15 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-		Bitmap *tp = Bitmap::FromFile(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp", false);
-		Bitmap &t = *tp;
-		const int h = t.GetHeight();
-		const int w = t.GetWidth();
-
-		BYTE* mytexturedata = new BYTE[h*w * 4];
-		for (int i = 0; i < h; i++)
-			for (int j = 0; j < w; j++)
-			{
-				Color c;
-				t.GetPixel(j, i, &c);
-				mytexturedata[i*w * 4 + j * 4] = c.GetR();
-				mytexturedata[i*w * 4 + j * 4 + 1] = c.GetG();
-				mytexturedata[i*w * 4 + j * 4 + 2] = c.GetB();
-				mytexturedata[i*w * 4 + j * 4 + 3] = c.GetA();
-			}
-
-
+		MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
+		
 		// Create the texture.
 		// Describe and create a Texture2D.
 		D3D12_RESOURCE_DESC textureDesc = {};
 		textureDesc.MipLevels = 1;
 		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		textureDesc.Width = w;
-		textureDesc.Height = h;
+		textureDesc.Width = image.width;
+		textureDesc.Height = image.height;
 		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 		textureDesc.DepthOrArraySize = 1;
 		textureDesc.SampleDesc.Count = 1;
@@ -767,9 +752,9 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 			IID_PPV_ARGS(&m_textureUploadHeap)));
 
 		D3D12_SUBRESOURCE_DATA textureData = {};
-		textureData.pData = &mytexturedata[0];
-		textureData.RowPitch = w * sizeof(Color);
-		textureData.SlicePitch = textureData.RowPitch * h;
+		textureData.pData = &image.bytes[0];
+		textureData.RowPitch = image.width * sizeof(Color);
+		textureData.SlicePitch = textureData.RowPitch * image.height;
 
 		UpdateSubresources(m_commandList.Get(), m_texture.Get(), m_textureUploadHeap.Get(), 0, 0, 1, &textureData);
 		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
