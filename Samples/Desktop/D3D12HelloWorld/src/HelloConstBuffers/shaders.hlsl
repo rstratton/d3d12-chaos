@@ -11,6 +11,7 @@
 
 static const float n1 = 1.0f;
 static const float n2 = 1.1f;
+static const float pi = 3.14159265f;
 
 cbuffer SceneConstantBuffer : register(b0)
 {
@@ -52,9 +53,8 @@ Texture2D g_texture : register(t0);
 SamplerState g_sampler : register(s0);
 
 
-float getTheta(float4 worldPosition, float4 normal)
+float getTheta(float4 viewVector, float4 normal)
 {
-	float4 viewVector = -normalize(worldPosition);
 	return acos(mul(viewVector, normal));
 }
 
@@ -73,6 +73,25 @@ float rParallel(float theta) {
 	return (n2 * cos(theta) - n1 * cos(thetaT)) / (n2 * cos(theta) + n1 * cos(thetaT));
 }
 
+float ggx_ndf(float3 h, float3 n, float alphasquared)
+{
+	float ret = 1.0;
+	float ndoth = mul(n, h);
+	if (ndoth <= 0)
+		return 0;
+
+	ret *= ndoth;
+
+	ret *= alphasquared;
+
+	float alphasquared_minus1 = (alphasquared - 1);
+
+	float denom = pi * (1 + (ndoth*ndoth)*(alphasquared_minus1*alphasquared_minus1));
+
+	ret /= denom;
+	return ret;
+}
+
 float4 PSMain(PSInput input) : SV_TARGET
 {
 	float4 result;
@@ -81,12 +100,28 @@ float4 PSMain(PSInput input) : SV_TARGET
 	float3 lightdir = normalize(lightpos - input.worldpos);
 	result = g_texture.Sample(g_sampler, input.texCoord) *mul(input.normal, lightdir);
 
+	float4 viewVector = -normalize(input.worldpos);
+
+	float3 h = normalize(viewVector + lightdir);
+	float alpha = 0.4;
+	float ndf_value = ggx_ndf(h, input.normal, alpha*alpha);
+
+	float ndotl = mul(input.normal, lightdir);
+	float ndotv = mul(input.normal, viewVector);
+
+	float masking_shadowing = 0.5 / lerp(2 * ndotl*ndotv, ndotl + ndotv, alpha);
+	float F_0 = 0.5;
+	float hdotlplus = max(0, mul(h, lightdir));
+	float fresnel = F_0 + (1 - F_0)*pow((1 - hdotlplus), 5);
+
+	result += fresnel * masking_shadowing * ndf_value;
+
 	// Fresnel
-	float theta = getTheta(input.worldpos, input.normal);
+	float theta = getTheta(viewVector, input.normal);
 	float rPerp = rPerpendicular(theta);
 	float rPar = rParallel(theta);
 	float reflectance = (rPerp * rPerp + rPar * rPar) / 2.0f;
-	result += reflectance * float4(0.8f, 0.0f, 0.8f, 0.0f);
+	//result += reflectance * float4(0.8f, 0.0f, 0.8f, 0.0f);
 
 	return result;
 }
