@@ -12,6 +12,7 @@
 #pragma once
 
 #include "DXSample.h"
+#include <vector>
 
 using namespace DirectX;
 
@@ -25,6 +26,60 @@ using Microsoft::WRL::ComPtr;
 #define USE_NORMALS_AND_TEXCOORDS 1
 #define USE_MSAA 1
 
+struct ObjVert {
+	float x, y, z;
+};
+
+struct ObjTexCoord {
+	float u, v;
+};
+
+struct ObjVertNorm {
+	float x, y, z;
+};
+
+struct ObjVertBundle {
+	ObjVert vertex;
+	ObjTexCoord texCoord;
+	ObjVertNorm normal;
+};
+
+struct ObjFace {
+	std::vector<UINT> vertices;
+};
+
+
+struct MeshAsset {
+	std::string path;
+	std::vector<ObjVertBundle>* m_verts;
+	std::vector<ObjFace>* m_faces;
+	float xmin, xmax, ymin, ymax, zmin, zmax;
+	float xmean, ymean, zmean;
+};
+struct Vertex
+{
+	XMFLOAT3 position;
+	XMFLOAT4 color;
+#if USE_NORMALS_AND_TEXCOORDS
+	XMFLOAT3 normal;
+	XMFLOAT2 texCoord;
+#endif
+};
+struct Mesh {
+	ComPtr<ID3D12Resource> m_vertexBuffer;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	D3D12_SUBRESOURCE_DATA m_vertexBufferSubresourceData;
+	Vertex *m_cpuVertexBuffer;
+
+	ComPtr<ID3D12Resource> m_indexBuffer;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+	D3D12_SUBRESOURCE_DATA m_indexBufferSubresourceData;
+	UINT *m_cpuIndexBuffer;
+
+	UINT m_vertexCount;
+	UINT m_indexCount;
+};
+
 class D3D12HelloConstBuffers : public DXSample
 {
 public:
@@ -37,15 +92,7 @@ public:
 
 	static const UINT FrameCount = 2;
 
-	struct Vertex
-	{
-		XMFLOAT3 position;
-		XMFLOAT4 color;
-#if USE_NORMALS_AND_TEXCOORDS
-		XMFLOAT3 normal;
-		XMFLOAT2 texCoord;
-#endif
-	};
+
 
 	struct SceneConstantBuffer
 	{
@@ -76,10 +123,10 @@ public:
 	const int kMipLevels = 3;
 
 	// App resources.
-	ComPtr<ID3D12Resource> m_vertexBuffer;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	//we theorize this can be shared between meshes? right guys?
+
 	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
-	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+	ComPtr<ID3D12Resource> m_indexBufferUploadHeap;
 #if USE_NORMALS_AND_TEXCOORDS
 	ComPtr<ID3D12Resource> m_texture;
 #endif
@@ -101,12 +148,16 @@ public:
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE m_cbvSrvHandle;	// Move past the SRV in slot 1.
 
+	std::vector<Mesh> m_meshes;
+	std::vector<MeshAsset> m_meshassets;
+
 
 	void LoadPipeline();
 	void LoadAssets();
 
 	void CreateConstantBuffer();
 	void CreateTextureResource();
+	void CreateMesh(std::string objname);
 	void CreateRTs();
 
 	void PopulateCommandList();

@@ -98,18 +98,21 @@ float4 PSMain(PSInput input) : SV_TARGET
 
 	// Diffuse
 	float3 lightdir = normalize(lightpos - input.worldpos);
-	result = g_texture.Sample(g_sampler, input.texCoord) *mul(input.normal, lightdir);
+	float4 n = 0;
+	n.xyz = normalize(input.normal.xyz);
+	result = g_texture.Sample(g_sampler, input.texCoord) *mul(n, lightdir);
 
 	float4 viewVector = -normalize(input.worldpos);
 
 	float3 h = normalize(viewVector + lightdir);
-	float alpha = 0.4;
-	float ndf_value = ggx_ndf(h, input.normal, alpha*alpha);
+	float alpha = 0.1;
+	float ndf_value = ggx_ndf(h, n, alpha*alpha);
 
-	float ndotl = mul(input.normal, lightdir);
-	float ndotv = mul(input.normal, viewVector);
+	float ndotl = mul(n, lightdir);
+	float ndotv = mul(n, viewVector);
 
-	float masking_shadowing = 0.5 / lerp(2 * ndotl*ndotv, ndotl + ndotv, alpha);
+	float masking_shadowing = (0.5 / lerp(2 * ndotl*ndotv, ndotl + ndotv, alpha));
+	//return masking_shadowing;
 	float F_0 = 0.5;
 	float hdotlplus = max(0, mul(h, lightdir));
 	float fresnel = F_0 + (1 - F_0)*pow((1 - hdotlplus), 5);
@@ -117,7 +120,7 @@ float4 PSMain(PSInput input) : SV_TARGET
 	result += fresnel * masking_shadowing * ndf_value;
 
 	// Fresnel
-	float theta = getTheta(viewVector, input.normal);
+	float theta = getTheta(viewVector, n);
 	float rPerp = rPerpendicular(theta);
 	float rPar = rParallel(theta);
 	float reflectance = (rPerp * rPerp + rPar * rPar) / 2.0f;

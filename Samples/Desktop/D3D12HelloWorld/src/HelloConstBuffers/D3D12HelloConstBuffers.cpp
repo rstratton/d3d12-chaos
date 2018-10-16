@@ -20,13 +20,14 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <map>
+#include <tuple>
+
 using std::vector;
 using std::string;
 using std::istringstream;
 using Gdiplus::Bitmap;
 using Gdiplus::Color;
-
-typedef D3D12HelloConstBuffers::Vertex Vertex;
 
 
 D3D12HelloConstBuffers::D3D12HelloConstBuffers(UINT width, UINT height, std::wstring name) :
@@ -57,7 +58,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
 {
 	UINT dxgiFactoryFlags = 0;
 
-#if defined(_DEBUG)
+//#if defined(_DEBUG)
 	// Enable the debug layer (requires the Graphics Tools "optional feature").
 	// NOTE: Enabling the debug layer after device creation will invalidate the active device.
 	{
@@ -70,7 +71,7 @@ void D3D12HelloConstBuffers::LoadPipeline()
 			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 	}
-#endif
+//#endif
 
 	ComPtr<IDXGIFactory4> factory;
 	ThrowIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)));
@@ -181,33 +182,13 @@ void D3D12HelloConstBuffers::LoadPipeline()
 	ThrowIfFailed(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)));
 }
 
-struct ObjVert {
-	float x, y, z;
-};
+#pragma region ObjParsing
 
-struct ObjTexCoord {
-	float u, v;
-};
-
-struct ObjVertNorm {
-	float x, y, z;
-};
-
-struct ObjVertBundle {
-	ObjVert vertex;
-	ObjTexCoord texCoord;
-	ObjVertNorm normal;
-};
-
-struct ObjFace {
-	vector<ObjVertBundle> vertices;
-};
-
-Vertex vertBundleToVert(ObjVertBundle bundle) {
+Vertex vertBundleToVert(ObjVertBundle bundle, float xoff, float yoff, float zoff) {
 	Vertex v;
-	v.position.x = bundle.vertex.x;
-	v.position.y = bundle.vertex.y;
-	v.position.z = bundle.vertex.z;
+	v.position.x = bundle.vertex.x+xoff;
+	v.position.y = bundle.vertex.y+yoff;
+	v.position.z = bundle.vertex.z+zoff;
 
 	v.color.x = 0.f;
 	v.color.y = 0.f;
@@ -224,32 +205,46 @@ Vertex vertBundleToVert(ObjVertBundle bundle) {
 	return v;
 }
 
-void objToBuffers(vector<ObjFace> faces, Vertex** vb, short** ib, UINT& vbSize, UINT& ibSize) {
+void objToBuffers(MeshAsset& asset, Mesh& mesh) {
 	vector<Vertex> vertices;
 
-	for (int i = 0; i < faces.size(); ++i) {
-		ObjFace face = faces[i];
+	auto& faces = *asset.m_faces;
+	auto& verts = *asset.m_verts;
 
-		for (int j = 1; j < face.vertices.size() - 1; ++j) {
-			vertices.push_back(vertBundleToVert(face.vertices[0]));
-			vertices.push_back(vertBundleToVert(face.vertices[j]));
-			vertices.push_back(vertBundleToVert(face.vertices[j + 1]));
+	auto vsize = verts.size();
+	mesh.m_cpuVertexBuffer = new Vertex[vsize];
+
+	for (int i = 0; i < vsize; i++)
+		mesh.m_cpuVertexBuffer[i] = vertBundleToVert(verts[i], 
+			-(asset.xmin+asset.xmax)*.5f,
+			-(asset.ymin + asset.ymax)*.5f, 
+			-(asset.zmin + asset.zmax)*.5f);
+
+	auto fsize = faces.size();
+	vector<UINT> tmp_ib;
+	tmp_ib.reserve(fsize * 3);
+	for (int i = 0; i < fsize; i++)
+	{
+		auto& face = faces[i];
+		auto& fverts = face.vertices;
+		auto fvsize = fverts.size();
+		for (int j = 1; j < fvsize-1; j++)
+		{
+			tmp_ib.push_back(fverts[0]);
+			tmp_ib.push_back(fverts[j]);
+			tmp_ib.push_back(fverts[j + 1]);
 		}
 	}
 
-	*vb = new Vertex[vertices.size()];
-	*ib = new short[vertices.size()];
+	mesh.m_cpuIndexBuffer = new UINT[tmp_ib.size()];
+	auto size = tmp_ib.size() * sizeof(UINT);
+	memcpy(mesh.m_cpuIndexBuffer, &(tmp_ib[0]), size);
 
-	for (short i = 0; i < vertices.size(); ++i) {
-		(*vb)[i] = vertices[i];
-		(*ib)[i] = i;
-	}
-
-	vbSize = vertices.size() * sizeof(Vertex);
-	ibSize = vertices.size() * sizeof(short);
+	mesh.m_vertexCount = vsize;
+	mesh.m_indexCount = tmp_ib.size();
 }
 
-vector<ObjFace> parseOBJ(string fname) {
+MeshAsset parseOBJ(string fname) {
 	using namespace std;
 	ifstream file(fname);
 	string str;
@@ -257,11 +252,20 @@ vector<ObjFace> parseOBJ(string fname) {
 	vector<ObjVert> vertices;
 	vector<ObjTexCoord> texes;
 	vector<ObjVertNorm> normals;
-	vector<ObjVertBundle> bundles;
-	vector<ObjFace> faces;
+	int max = 227610;
+	vertices.reserve(max);
+	texes.reserve(max);
+	normals.reserve(max);
+	MeshAsset asset;
+	asset.m_faces = new vector<ObjFace>();
+	asset.m_verts = new vector<ObjVertBundle>();
+	asset.xmin = std::numeric_limits<float>::infinity(), asset.xmax = -std::numeric_limits<float>::infinity();
+	asset.ymin = asset.xmin, asset.ymax = asset.xmax, asset.zmin = asset.xmin, asset.zmax = asset.xmax;
+
+	std::map<tuple<int, int, int>, int> tuple_to_final;
 
 	while (getline(file, str)) {
-		if (str[0] == '#') {
+		if (str == "" || str[0] == '#' || str[0] == 'u' || str[0] == 'm' || str[0] == 'g') {
 			continue;
 		}
 
@@ -274,6 +278,21 @@ vector<ObjFace> parseOBJ(string fname) {
 			iss >> vert.x;
 			iss >> vert.y;
 			iss >> vert.z;
+			if (asset.xmin > vert.x)
+				asset.xmin = vert.x;
+			if (asset.xmax < vert.x)
+				asset.xmax = vert.x;
+
+			if (asset.ymin > vert.y)
+				asset.ymin = vert.y;
+			if (asset.ymax < vert.y)
+				asset.ymax = vert.y;
+
+			if (asset.zmin > vert.z)
+				asset.zmin = vert.z;
+			if (asset.zmax < vert.z)
+				asset.zmax = vert.z;
+
 			vertices.push_back(vert);
 		}
 		else if (prefix == "vt") {
@@ -293,6 +312,8 @@ vector<ObjFace> parseOBJ(string fname) {
 			ObjFace face;
 			string vertBundleString;
 			for (int i = 0; i < 5; ++i) {
+				if (!iss.good())
+					break;
 				iss >> vertBundleString;
 
 				stringstream vertBundleStream(vertBundleString);
@@ -307,20 +328,42 @@ vector<ObjFace> parseOBJ(string fname) {
 				int texIdx = stoi(seglist[1]) - 1;
 				int normIdx = stoi(seglist[2]) - 1;
 
-				face.vertices.push_back(
-					ObjVertBundle{
-						vertices[vertIdx],
-						texes[texIdx],
-						normals[normIdx]
-					}
-				);
+				auto t = make_tuple(vertIdx, texIdx, normIdx);
+				
+				auto iter = tuple_to_final.find(t);
+
+				int final_idx = -1;
+
+				if (iter == tuple_to_final.end())
+				{
+					final_idx = asset.m_verts->size();
+					tuple_to_final[t] = final_idx;
+
+					asset.m_verts->push_back(
+						ObjVertBundle{
+							vertices[vertIdx],
+							texes[texIdx],
+							normals[normIdx]
+						}
+					);
+				}
+				else
+					final_idx = iter->second;
+
+				face.vertices.push_back(final_idx);
+
 			}
-			faces.push_back(face);
+			asset.m_faces->push_back(face);
+		}
+		else {
+			throw new exception;
 		}
 	}
 
-	return faces;
+	return asset;
 }
+#pragma endregion ObjParsing
+
 
 // Load the sample assets.
 void D3D12HelloConstBuffers::LoadAssets()
@@ -406,8 +449,10 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 		D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, &error);
 		error2 = (char*)error->GetBufferPointer();
+		if (error2) printf(error2);
 		D3DCompileFromFile(GetAssetFullPath(L"shaders.hlsl").c_str(), nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, &error);
 		error2 = (char*)error->GetBufferPointer();
+		if (error2) printf(error2);
 
 		// Define the vertex input layout.
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
@@ -475,52 +520,10 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 	CreateTextureResource();
 
+	CreateMesh("D:\\repos\\d3d12-chaos\\Resources\\dodecahedron.obj");
+	//CreateMesh("D:\\repos\\d3d12-chaos\\Resources\\dodecahedron.obj");
 
-	// Create the vertex buffer.
-	{	
-		UINT vertexBufferSize;
-		UINT indexBufferSize;
-		Vertex* triangleVertices;
-		short* indices;
-
-		//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
-
-		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
-
-		// Note: using upload heaps to transfer static data like vert buffers is not 
-		// recommended. Every time the GPU needs it, the upload heap will be marshalled 
-		// over. Please read up on Default Heap usage. An upload heap is used here for 
-		// code simplicity and because there are very few verts to actually transfer.
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-			D3D12_RESOURCE_STATE_COPY_DEST,
-			nullptr,
-			IID_PPV_ARGS(&m_vertexBuffer)));
-
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&m_vertexBufferUploadHeap)));
-
-		m_vertexBufferDataFuck = {};
-		m_vertexBufferDataFuck.pData = (BYTE*)triangleVertices;
-		m_vertexBufferDataFuck.RowPitch = vertexBufferSize;
-		m_vertexBufferDataFuck.SlicePitch = vertexBufferSize;
-		// Copy the triangle data to the vertex buffer.
-		UpdateSubresources<1>(m_commandList.Get(), m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &m_vertexBufferDataFuck);
-		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
-
-		// Initialize the vertex buffer view.
-		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
-		m_vertexBufferView.SizeInBytes = vertexBufferSize;
-	}
+	CreateMesh("C:\\Users\\elliot\\Downloads\\erato\\erato-1.obj");
 
 	CreateConstantBuffer();
 
@@ -547,6 +550,90 @@ void D3D12HelloConstBuffers::LoadAssets()
 	}
 }
 
+void D3D12HelloConstBuffers::CreateMesh(std::string objname)
+{
+	// Note: using upload heaps to transfer static data like vert buffers is not 
+// recommended. Every time the GPU needs it, the upload heap will be marshalled 
+// over. Please read up on Default Heap usage. An upload heap is used here for 
+// code simplicity and because there are very few verts to actually transfer.
+	Mesh mesh;
+
+	//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
+	auto asset = parseOBJ(objname);
+	m_meshassets.push_back(asset);
+
+	objToBuffers(asset, mesh);
+
+	auto indexBufferSizeInBytes = mesh.m_indexCount * sizeof(UINT);
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSizeInBytes),
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&mesh.m_indexBuffer)));
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSizeInBytes),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_indexBufferUploadHeap)));
+
+	mesh.m_indexBufferSubresourceData = {};
+	mesh.m_indexBufferSubresourceData.pData = (BYTE*)mesh.m_cpuIndexBuffer;
+	mesh.m_indexBufferSubresourceData.RowPitch = indexBufferSizeInBytes;
+	mesh.m_indexBufferSubresourceData.SlicePitch = indexBufferSizeInBytes;
+	// Copy the triangle data to the index buffer.
+	auto size = UpdateSubresources<1>(m_commandList.Get(), mesh.m_indexBuffer.Get(), m_indexBufferUploadHeap.Get(), 0, 0, 1, &mesh.m_indexBufferSubresourceData);
+	if (size != indexBufferSizeInBytes)
+		throw new exception;
+	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mesh.m_indexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+	mesh.m_indexBufferView.BufferLocation = mesh.m_indexBuffer->GetGPUVirtualAddress();
+	mesh.m_indexBufferView.SizeInBytes = indexBufferSizeInBytes;
+	mesh.m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+	auto vertexBufferSizeInBytes = mesh.m_vertexCount * sizeof(Vertex);
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSizeInBytes),
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&mesh.m_vertexBuffer)));
+
+	ThrowIfFailed(m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSizeInBytes),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_vertexBufferUploadHeap)));
+
+	mesh.m_vertexBufferSubresourceData = {};
+	mesh.m_vertexBufferSubresourceData.pData = (BYTE*)mesh.m_cpuVertexBuffer;
+	mesh.m_vertexBufferSubresourceData.RowPitch = vertexBufferSizeInBytes;
+	mesh.m_vertexBufferSubresourceData.SlicePitch = vertexBufferSizeInBytes;
+	// Copy the triangle data to the vertex buffer.
+	size = UpdateSubresources<1>(m_commandList.Get(), mesh.m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &mesh.m_vertexBufferSubresourceData);
+	if (size != vertexBufferSizeInBytes)
+		throw new exception;
+	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(mesh.m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+	// Initialize the vertex buffer view.
+	mesh.m_vertexBufferView.BufferLocation = mesh.m_vertexBuffer->GetGPUVirtualAddress();
+	mesh.m_vertexBufferView.StrideInBytes = sizeof(Vertex);
+	mesh.m_vertexBufferView.SizeInBytes = vertexBufferSizeInBytes;
+
+	m_meshes.push_back(mesh);
+}
+
+
+
 // Update frame-based values.
 void D3D12HelloConstBuffers::OnUpdate()
 {
@@ -555,9 +642,23 @@ void D3D12HelloConstBuffers::OnUpdate()
 
 	m_angle += 0.005f;
 
-	m_constantBufferData.model.r[0] = { cos(m_angle), 0.0f, -sin(m_angle), 0.0f };
-	m_constantBufferData.model.r[1] = { 0.0f,         1.0f, 0.0f,          0.0f };
-	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, cos(m_angle),  1.0f };
+#if 0
+	auto scale = 0.05f;
+
+	auto x_offset = 11430.0f;
+	auto y_offset = 12988.0f;
+	auto z_offset = 12776.0f;
+#else 
+	auto scale = 1.f;
+
+	//auto scale = 1.0f;// 0.001f;
+
+	auto x_offset=0.f,y_offset = 0.f,z_offset = 50.f;
+#endif
+
+	m_constantBufferData.model.r[0] = { scale*cos(m_angle), 0.0f, -sin(m_angle), x_offset };
+	m_constantBufferData.model.r[1] = { 0.0f,         scale, 0.0f,          y_offset };
+	m_constantBufferData.model.r[2] = { sin(m_angle), 0.0f, scale*cos(m_angle),  z_offset };
 	m_constantBufferData.model.r[3] = { 0.0f,         0.0f, 0.0f,          1.0f };	
 
 
@@ -647,9 +748,13 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
 	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	m_commandList->DrawInstanced(m_vertexBufferView.SizeInBytes / sizeof(Vertex), 1, 0, 0);
-
+	for (int i = 0; i < m_meshes.size(); i++)
+	{
+		auto mesh = m_meshes[i];
+		m_commandList->IASetVertexBuffers(0, 1, &mesh.m_vertexBufferView);
+		m_commandList->IASetIndexBuffer(&mesh.m_indexBufferView);
+		m_commandList->DrawIndexedInstanced(mesh.m_indexCount, 1, 0, 0, 0);
+	}
 	// Indicate that the back buffer will now be used to present.
 #if USE_MSAA
 	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texturemsaa.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE));
@@ -735,7 +840,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 
 	{
 	//MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
-		auto loaded = ImageLoader(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp");
+		auto loaded = ImageLoader(L"D:\\repos\\d3d12-chaos\\Resources\\dodecahedron.bmp");
 	MipMap mip0 = loaded.getMipMap(0);
 
 
@@ -854,13 +959,15 @@ void D3D12HelloConstBuffers::CreateRTs()
 	textureDescMSAA.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
 	textureDescMSAA.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
+	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+	CD3DX12_CLEAR_VALUE clearval(DXGI_FORMAT_R8G8B8A8_UNORM, clearColor);
 
 	ThrowIfFailed(m_device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAG_NONE,
 		&textureDescMSAA,
 		D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
-		nullptr,
+		&clearval,
 		IID_PPV_ARGS(&m_texturemsaa)));
 
 
