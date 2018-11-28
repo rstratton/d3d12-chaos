@@ -483,8 +483,8 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("C:\\Users\\bob\\graphics\\d3d12-chaos\\Resources\\dodecahedron.obj");
+		//vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
 
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
@@ -734,8 +734,8 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-	//MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
-		auto loaded = ImageLoader(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp");
+	auto loaded = ImageLoader(L"C:\\Users\\bob\\graphics\\d3d12-chaos\\Resources\\dodecahedron.bmp");
+    // auto loaded = ImageLoader(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp");
 	MipMap mip0 = loaded.getMipMap(0);
 
 
