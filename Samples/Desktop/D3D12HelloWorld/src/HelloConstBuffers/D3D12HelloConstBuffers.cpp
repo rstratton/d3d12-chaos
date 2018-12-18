@@ -475,52 +475,12 @@ void D3D12HelloConstBuffers::LoadAssets()
 
 	CreateTextureResource();
 
-
-	// Create the vertex buffer.
-	{	
-		UINT vertexBufferSize;
-		UINT indexBufferSize;
-		Vertex* triangleVertices;
-		short* indices;
-
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\bob\\graphics\\d3d12-chaos\\Resources\\dodecahedron.obj");
-		//vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
-
-		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
-
-		// Note: using upload heaps to transfer static data like vert buffers is not 
-		// recommended. Every time the GPU needs it, the upload heap will be marshalled 
-		// over. Please read up on Default Heap usage. An upload heap is used here for 
-		// code simplicity and because there are very few verts to actually transfer.
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-			D3D12_RESOURCE_STATE_COPY_DEST,
-			nullptr,
-			IID_PPV_ARGS(&m_vertexBuffer)));
-
-		ThrowIfFailed(m_device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&m_vertexBufferUploadHeap)));
-
-		m_vertexBufferDataFuck = {};
-		m_vertexBufferDataFuck.pData = (BYTE*)triangleVertices;
-		m_vertexBufferDataFuck.RowPitch = vertexBufferSize;
-		m_vertexBufferDataFuck.SlicePitch = vertexBufferSize;
-		// Copy the triangle data to the vertex buffer.
-		UpdateSubresources<1>(m_commandList.Get(), m_vertexBuffer.Get(), m_vertexBufferUploadHeap.Get(), 0, 0, 1, &m_vertexBufferDataFuck);
-		m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
-
-		// Initialize the vertex buffer view.
-		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
-		m_vertexBufferView.SizeInBytes = vertexBufferSize;
-	}
+    // Create the vertex buffer V2
+    {
+        Mesh m("C:\\Users\\bob\\graphics\\d3d12-chaos\\Resources\\dodecahedron.obj");
+        m.CreateResource(m_device, m_commandList);
+        m_meshes.push_back(m);
+    }
 
 	CreateConstantBuffer();
 
@@ -647,8 +607,10 @@ void D3D12HelloConstBuffers::PopulateCommandList()
 	const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
 	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	m_commandList->DrawInstanced(m_vertexBufferView.SizeInBytes / sizeof(Vertex), 1, 0, 0);
+    for (int i = 0; i < m_meshes.size(); ++i) {
+        m_commandList->IASetVertexBuffers(0, 1, &(m_meshes[i].vBufView));
+        m_commandList->DrawInstanced(m_meshes[i].vBufView.SizeInBytes / sizeof(Vertex), 1, 0, 0);
+    }
 
 	// Indicate that the back buffer will now be used to present.
 #if USE_MSAA
@@ -884,4 +846,45 @@ void D3D12HelloConstBuffers::CreateRTs()
 		nullptr,
 		IID_PPV_ARGS(&m_textureresolve)));
 #endif
+}
+
+Mesh::Mesh(string fname) {
+    vector<ObjFace> faces = parseOBJ(fname);
+    objToBuffers(faces, &vBufCPU, &iBuf, vBufSize, iBufSize);
+}
+
+void Mesh::CreateResource(ComPtr<ID3D12Device> device, ComPtr<ID3D12GraphicsCommandList> commandList) {
+    // Note: using upload heaps to transfer static data like vert buffers is not
+    // recommended. Every time the GPU needs it, the upload heap will be marshalled
+    // over. Please read up on Default Heap usage. An upload heap is used here for
+    // code simplicity and because there are very few verts to actually transfer.
+    ThrowIfFailed(device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr,
+        IID_PPV_ARGS(&vBuf)));
+
+    ThrowIfFailed(device->CreateCommittedResource(
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+        D3D12_HEAP_FLAG_NONE,
+        &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
+        D3D12_RESOURCE_STATE_GENERIC_READ,
+        nullptr,
+        IID_PPV_ARGS(&vBufUploadHeap)));
+
+    vBufData = {};
+    vBufData.pData = (BYTE*)vBufCPU;
+    vBufData.RowPitch = vBufSize;
+    vBufData.SlicePitch = vBufSize;
+
+    // Copy the triangle data to the vertex buffer.
+    UpdateSubresources<1>(commandList.Get(), vBuf.Get(), vBufUploadHeap.Get(), 0, 0, 1, &vBufData);
+    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(vBuf.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+
+    // Initialize the vertex buffer view.
+    vBufView.BufferLocation = vBuf->GetGPUVirtualAddress();
+    vBufView.StrideInBytes = sizeof(Vertex);
+    vBufView.SizeInBytes = vBufSize;
 }

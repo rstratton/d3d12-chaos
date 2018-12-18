@@ -12,6 +12,7 @@
 #pragma once
 
 #include "DXSample.h"
+#include <vector>
 
 using namespace DirectX;
 
@@ -24,6 +25,8 @@ using Microsoft::WRL::ComPtr;
 
 #define USE_NORMALS_AND_TEXCOORDS 1
 #define USE_MSAA 1
+
+class Mesh;
 
 class D3D12HelloConstBuffers : public DXSample
 {
@@ -76,6 +79,7 @@ public:
 	const int kMipLevels = 3;
 
 	// App resources.
+    std::vector<Mesh> m_meshes;
 	ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
@@ -111,4 +115,21 @@ public:
 
 	void PopulateCommandList();
 	void WaitForPreviousFrame();
+};
+
+class Mesh {
+public:
+    Mesh(std::string fname);
+    Mesh() {}
+    ~Mesh() {}
+    void CreateResource(ComPtr<ID3D12Device> device, ComPtr<ID3D12GraphicsCommandList> commandList);
+
+    UINT vBufSize;
+    UINT iBufSize;
+    D3D12HelloConstBuffers::Vertex* vBufCPU;
+    short* iBuf;
+    ComPtr<ID3D12Resource> vBuf;
+    ComPtr<ID3D12Resource> vBufUploadHeap;
+    D3D12_SUBRESOURCE_DATA vBufData;
+    D3D12_VERTEX_BUFFER_VIEW vBufView;
 };
