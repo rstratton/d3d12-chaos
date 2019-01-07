@@ -80,10 +80,7 @@ public:
 
 	// App resources.
     std::vector<Mesh> m_meshes;
-	ComPtr<ID3D12Resource> m_vertexBuffer;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
-	ComPtr<ID3D12Resource> m_vertexBufferUploadHeap;
-	D3D12_SUBRESOURCE_DATA m_vertexBufferDataFuck;
+
 #if USE_NORMALS_AND_TEXCOORDS
 	ComPtr<ID3D12Resource> m_texture;
 #endif
