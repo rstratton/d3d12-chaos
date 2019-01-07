@@ -116,6 +116,10 @@ public:
 
 class Mesh {
 public:
+    struct ConstantBufferData {
+        XMMATRIX transform;
+    };
+
     Mesh(std::string fname);
     Mesh() {}
     ~Mesh() {}
@@ -129,4 +133,9 @@ public:
     ComPtr<ID3D12Resource> vBufUploadHeap;
     D3D12_SUBRESOURCE_DATA vBufData;
     D3D12_VERTEX_BUFFER_VIEW vBufView;
+
+    ComPtr<ID3D12Resource> constantBuffer;
+    ConstantBufferData constantBufferData;
+    CD3DX12_CPU_DESCRIPTOR_HANDLE cbvSrvHandle;	// Move past the SRV in slot 1.
+    UINT8* pCbvDataBegin;
 };

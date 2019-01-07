@@ -854,37 +854,63 @@ Mesh::Mesh(string fname) {
 }
 
 void Mesh::CreateResource(ComPtr<ID3D12Device> device, ComPtr<ID3D12GraphicsCommandList> commandList) {
-    // Note: using upload heaps to transfer static data like vert buffers is not
-    // recommended. Every time the GPU needs it, the upload heap will be marshalled
-    // over. Please read up on Default Heap usage. An upload heap is used here for
-    // code simplicity and because there are very few verts to actually transfer.
-    ThrowIfFailed(device->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-        D3D12_HEAP_FLAG_NONE,
-        &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(&vBuf)));
+    // Vertex buffer initialization
+    {
+        // Note: using upload heaps to transfer static data like vert buffers is not
+        // recommended. Every time the GPU needs it, the upload heap will be marshalled
+        // over. Please read up on Default Heap usage. An upload heap is used here for
+        // code simplicity and because there are very few verts to actually transfer.
+        ThrowIfFailed(device->CreateCommittedResource(
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+            D3D12_HEAP_FLAG_NONE,
+            &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&vBuf)));
 
-    ThrowIfFailed(device->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-        D3D12_HEAP_FLAG_NONE,
-        &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
-        D3D12_RESOURCE_STATE_GENERIC_READ,
-        nullptr,
-        IID_PPV_ARGS(&vBufUploadHeap)));
+        ThrowIfFailed(device->CreateCommittedResource(
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+            D3D12_HEAP_FLAG_NONE,
+            &CD3DX12_RESOURCE_DESC::Buffer(vBufSize),
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&vBufUploadHeap)));
 
-    vBufData = {};
-    vBufData.pData = (BYTE*)vBufCPU;
-    vBufData.RowPitch = vBufSize;
-    vBufData.SlicePitch = vBufSize;
+        vBufData = {};
+        vBufData.pData = (BYTE*)vBufCPU;
+        vBufData.RowPitch = vBufSize;
+        vBufData.SlicePitch = vBufSize;
 
-    // Copy the triangle data to the vertex buffer.
-    UpdateSubresources<1>(commandList.Get(), vBuf.Get(), vBufUploadHeap.Get(), 0, 0, 1, &vBufData);
-    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(vBuf.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
+        // Copy the triangle data to the vertex buffer.
+        UpdateSubresources<1>(commandList.Get(), vBuf.Get(), vBufUploadHeap.Get(), 0, 0, 1, &vBufData);
+        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(vBuf.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER));
 
-    // Initialize the vertex buffer view.
-    vBufView.BufferLocation = vBuf->GetGPUVirtualAddress();
-    vBufView.StrideInBytes = sizeof(Vertex);
-    vBufView.SizeInBytes = vBufSize;
+        // Initialize the vertex buffer view.
+        vBufView.BufferLocation = vBuf->GetGPUVirtualAddress();
+        vBufView.StrideInBytes = sizeof(Vertex);
+        vBufView.SizeInBytes = vBufSize;
+    }
+
+    // Constant buffer initialization
+    {
+        ThrowIfFailed(device->CreateCommittedResource(
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+            D3D12_HEAP_FLAG_NONE,
+            &CD3DX12_RESOURCE_DESC::Buffer(1024 * 64),
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&constantBuffer)));
+
+        // Describe and create a constant buffer view.
+        D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+        cbvDesc.BufferLocation = constantBuffer->GetGPUVirtualAddress();
+        cbvDesc.SizeInBytes = (sizeof(ConstantBufferData) + 255) & ~255;	// CB size is required to be 256-byte aligned.
+        device->CreateConstantBufferView(&cbvDesc, cbvSrvHandle);
+
+        // Map and initialize the constant buffer. We don't unmap this until the
+        // app closes. Keeping things mapped for the lifetime of the resource is okay.
+        CD3DX12_RANGE readRange(0, 0);		// We do not intend to read from this resource on the CPU.
+        ThrowIfFailed(constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pCbvDataBegin)));
+        memcpy(pCbvDataBegin, &constantBufferData, sizeof(constantBufferData));
+    }
 }
