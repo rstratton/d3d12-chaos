@@ -134,8 +134,10 @@ public:
     D3D12_SUBRESOURCE_DATA vBufData;
     D3D12_VERTEX_BUFFER_VIEW vBufView;
 
+	ComPtr<ID3D12DescriptorHeap> cbvHeap;
     ComPtr<ID3D12Resource> constantBuffer;
     ConstantBufferData constantBufferData;
     CD3DX12_CPU_DESCRIPTOR_HANDLE cbvSrvHandle;	// Move past the SRV in slot 1.
-    UINT8* pCbvDataBegin;
+	UINT cbvSrvDescriptorSize;
+	UINT8* pCbvDataBegin;
 };
