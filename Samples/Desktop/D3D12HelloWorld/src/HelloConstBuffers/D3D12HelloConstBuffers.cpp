@@ -483,8 +483,7 @@ void D3D12HelloConstBuffers::LoadAssets()
 		Vertex* triangleVertices;
 		short* indices;
 
-		//vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
-		vector<ObjFace> faces = parseOBJ("C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.obj");
+		vector<ObjFace> faces = parseOBJ("..\\..\\..\\..\\..\\Resources\\dodecahedron.obj");
 
 		objToBuffers(faces, &triangleVertices, &indices, vertexBufferSize, indexBufferSize);
 
@@ -734,8 +733,7 @@ void D3D12HelloConstBuffers::CreateTextureResource()
 #if USE_NORMALS_AND_TEXCOORDS
 
 	{
-	//MipMap image = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp").getMipMap(0);
-		auto loaded = ImageLoader(L"C:\\Users\\elliotc\\Downloads\\samples\\dodecahedron.bmp");
+	auto loaded = ImageLoader(L"..\\..\\..\\..\\..\\Resources\\dodecahedron.bmp");
 	MipMap mip0 = loaded.getMipMap(0);
 
 
@@ -853,14 +851,17 @@ void D3D12HelloConstBuffers::CreateRTs()
 	textureDescMSAA.SampleDesc.Count = kSampleCount;
 	textureDescMSAA.SampleDesc.Quality = DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
 	textureDescMSAA.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
+    
+    // Assign an optimized clear value; more efficient
+    float clearColor[4] = { 0.0f, 0.2f, 0.4f, 1.0f };
+    CD3DX12_CLEAR_VALUE clearValue(DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM, clearColor);
 
 	ThrowIfFailed(m_device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
 		D3D12_HEAP_FLAG_NONE,
 		&textureDescMSAA,
 		D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
-		nullptr,
+		&clearValue,
 		IID_PPV_ARGS(&m_texturemsaa)));
 
 
